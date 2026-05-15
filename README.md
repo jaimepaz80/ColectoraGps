@@ -1,1 +1,226 @@
-# ColectoraGps
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ColectoraGps - Topografía GNSS</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #e74c3c; --active: #27ae60; --bg: #ecf0f1; --text: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); padding: 15px; display: flex; justify-content: center; margin: 0; }
+        .app-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 500px; width: 100%; text-align: center; }
+        h1 { color: var(--primary); font-size: 1.4rem; margin-top: 0; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+        
+        .input-group { text-align: left; margin-bottom: 15px; }
+        label { font-weight: bold; font-size: 0.85rem; color: #555; display: block; margin-bottom: 5px; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+
+        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin-bottom: 15px; background: #ddd; color: #555; transition: 0.3s; }
+        .status-recording { background: var(--active); color: white; animation: pulse 2s infinite; }
+        
+        .data-panel { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; }
+        .data-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .label { font-weight: bold; color: var(--primary); }
+        .value { font-family: monospace; font-size: 1rem; color: #2980b9; }
+        
+        button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
+        #btnToggle { background: var(--primary); color: white; }
+        #btnToggle.recording { background: var(--accent); }
+        
+        .action-buttons { display: none; gap: 10px; margin-top: 10px; }
+        .btn-half { width: 50%; padding: 12px; font-size: 0.85rem;}
+        #btnExport { background: #3498db; color: white; margin-bottom: 0;}
+        #btnShare { background: #27ae60; color: white; margin-bottom: 0;}
+        #btnDiscard { background: #e74c3c; color: white; display: none; margin-top: 10px; }
+
+        #log { background: #111; color: #0f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; height: 100px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); } }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <h1>ColectoraGps</h1>
+        
+        <div class="input-group">
+            <label>Identificador del Punto:</label>
+            <input type="text" id="puntoName" placeholder="Ejemplo: R-1, Base-P1..." autocomplete="off">
+        </div>
+
+        <div id="statusBadge" class="status-badge">ESPERANDO INICIO...</div>
+
+        <div class="data-panel">
+            <div class="data-row"><span class="label">Latitud:</span> <span id="valLat" class="value">---</span></div>
+            <div class="data-row"><span class="label">Longitud:</span> <span id="valLon" class="value">---</span></div>
+            <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
+            <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
+            <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--accent);">0</span></div>
+        </div>
+
+        <button id="btnToggle" onclick="toggleRecording()">INICIAR LEVANTAMIENTO</button>
+        
+        <div id="actionButtons" class="action-buttons">
+            <button id="btnExport" class="btn-half" onclick="exportGPX(false)">💾 DESCARGAR</button>
+            <button id="btnShare" class="btn-half" onclick="exportGPX(true)">📲 COMPARTIR</button>
+        </div>
+        <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR (BORRAR)</button>
+
+        <div id="log">Sistema Web listo. Asigne un nombre al punto y presione Iniciar.</div>
+    </div>
+
+    <script>
+        let watchId = null;
+        let isRecording = false;
+        let trackpoints = [];
+        let currentPuntoName = "Punto_GPS";
+
+        const btnToggle = document.getElementById('btnToggle');
+        const actionButtons = document.getElementById('actionButtons');
+        const btnDiscard = document.getElementById('btnDiscard');
+        const statusBadge = document.getElementById('statusBadge');
+        const logPanel = document.getElementById('log');
+        const inputName = document.getElementById('puntoName');
+
+        function log(msg) {
+            logPanel.innerHTML += `\n> ${msg}`;
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        function toggleRecording() {
+            if (!isRecording) {
+                if (!navigator.geolocation) { 
+                    alert("Error: Su navegador no soporta permisos de GPS."); 
+                    return; 
+                }
+                
+                let nameVal = inputName.value.trim();
+                if(!nameVal) { 
+                    alert("Control de Calidad: Por favor, escriba un Identificador para el Punto antes de medir."); 
+                    inputName.focus(); 
+                    return; 
+                }
+                currentPuntoName = nameVal;
+
+                // Reiniciar para una nueva toma de datos
+                trackpoints = [];
+                document.getElementById('valPts').innerText = "0";
+                actionButtons.style.display = 'none';
+                btnDiscard.style.display = 'none';
+                inputName.disabled = true; 
+                
+                // Solicitar acceso profundo al hardware GNSS
+                const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+                watchId = navigator.geolocation.watchPosition(onSuccess, onError, options);
+                
+                isRecording = true;
+                btnToggle.innerText = "DETENER LEVANTAMIENTO";
+                btnToggle.classList.add("recording");
+                statusBadge.innerText = `GRABANDO: ${currentPuntoName}`;
+                statusBadge.classList.add("status-recording");
+                log(`Levantamiento iniciado para: ${currentPuntoName}... Buscando satélites.`);
+
+            } else {
+                navigator.geolocation.clearWatch(watchId);
+                isRecording = false;
+                btnToggle.innerText = "NUEVO LEVANTAMIENTO";
+                btnToggle.classList.remove("recording");
+                statusBadge.innerText = "LEVANTAMIENTO DETENIDO";
+                statusBadge.classList.remove("status-recording");
+                inputName.disabled = false;
+                
+                if(trackpoints.length > 0) {
+                    actionButtons.style.display = 'flex';
+                    btnDiscard.style.display = 'block';
+                    log(`Punto ${currentPuntoName} finalizado exitosamente. ${trackpoints.length} épocas registradas.`);
+                } else {
+                    log("Grabación detenida. No se detectaron satélites con precisión suficiente.");
+                }
+            }
+        }
+
+        function onSuccess(position) {
+            const coords = position.coords;
+            const lat = coords.latitude.toFixed(8);
+            const lon = coords.longitude.toFixed(8);
+            // Validar que exista cota, de lo contrario colocar 0.000
+            const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
+            
+            // La precisión (accuracy) nativa de Android se traduce a una estimación DOP
+            const accuracy = coords.accuracy; 
+            const hdop = (accuracy / 5).toFixed(2); 
+            const timeIso = new Date(position.timestamp).toISOString();
+
+            document.getElementById('valLat').innerText = lat;
+            document.getElementById('valLon').innerText = lon;
+            document.getElementById('valEle').innerText = ele;
+            document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m`;
+
+            // Filtro de ruido primario: Descartar mediciones muy erráticas (> 100m error)
+            if(accuracy <= 100) {
+                trackpoints.push({ lat, lon, ele, timeIso, hdop });
+                document.getElementById('valPts').innerText = trackpoints.length;
+            }
+        }
+
+        function onError(err) {
+            log(`ERROR GPS (${err.code}): ${err.message}`);
+            if(err.code === 1) {
+                alert("Permiso Denegado: Debe autorizar el uso de Ubicación en su navegador web.");
+            }
+        }
+
+        function descartar() {
+            if(confirm(`Atención: ¿Está seguro de borrar permanentemente los datos medidos para [${currentPuntoName}]?`)) {
+                trackpoints = [];
+                document.getElementById('valPts').innerText = "0";
+                document.getElementById('valLat').innerText = "---";
+                document.getElementById('valLon').innerText = "---";
+                document.getElementById('valEle').innerText = "---";
+                document.getElementById('valAcc').innerText = "---";
+                actionButtons.style.display = 'none';
+                btnDiscard.style.display = 'none';
+                inputName.value = '';
+                log("Medición eliminada. El sistema está listo para registrar un nuevo punto.");
+            }
+        }
+
+        function generarGPXString() {
+            // Estructura XML exigida por el estándar GPX 1.1
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            trackpoints.forEach(pt => {
+                gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
+            });
+            gpx += `</trkseg></trk>\n</gpx>`;
+            return gpx;
+        }
+
+        async function exportGPX(share) {
+            if (trackpoints.length === 0) return;
+            const gpxString = generarGPXString();
+            const fileName = `${currentPuntoName}.gpx`;
+            const file = new File([gpxString], fileName, { type: "application/gpx+xml" });
+
+            if (share && navigator.share) {
+                try {
+                    await navigator.share({
+                        title: `Levantamiento GNSS: ${currentPuntoName}`,
+                        text: `Adjunto archivo topográfico GPX del punto [${currentPuntoName}] generado por ColectoraGps.`,
+                        files: [file]
+                    });
+                    log("El archivo GPX ha sido enviado.");
+                } catch (e) {
+                    log("Interacción de compartir cancelada por el usuario.");
+                }
+            } else {
+                // Generar blob de descarga forzada para el navegador
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(file);
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                log(`Descarga iniciada. Revise su carpeta de 'Descargas' para el archivo: ${fileName}`);
+            }
+        }
+    </script>
+</body>
+</html>
