@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ColectoraGps - Topografía GNSS</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    
     <style>
         :root { --primary: #2c3e50; --accent: #e74c3c; --active: #27ae60; --bg: #ecf0f1; --text: #333; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); padding: 15px; display: flex; justify-content: center; margin: 0; }
@@ -100,14 +103,12 @@
                 }
                 currentPuntoName = nameVal;
 
-                // Reiniciar para una nueva toma de datos
                 trackpoints = [];
                 document.getElementById('valPts').innerText = "0";
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
                 
-                // Solicitar acceso profundo al hardware GNSS
                 const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
                 watchId = navigator.geolocation.watchPosition(onSuccess, onError, options);
                 
@@ -141,10 +142,7 @@
             const coords = position.coords;
             const lat = coords.latitude.toFixed(8);
             const lon = coords.longitude.toFixed(8);
-            // Validar que exista cota, de lo contrario colocar 0.000
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
-            
-            // La precisión (accuracy) nativa de Android se traduce a una estimación DOP
             const accuracy = coords.accuracy; 
             const hdop = (accuracy / 5).toFixed(2); 
             const timeIso = new Date(position.timestamp).toISOString();
@@ -154,7 +152,6 @@
             document.getElementById('valEle').innerText = ele;
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m`;
 
-            // Filtro de ruido primario: Descartar mediciones muy erráticas (> 100m error)
             if(accuracy <= 100) {
                 trackpoints.push({ lat, lon, ele, timeIso, hdop });
                 document.getElementById('valPts').innerText = trackpoints.length;
@@ -184,7 +181,6 @@
         }
 
         function generarGPXString() {
-            // Estructura XML exigida por el estándar GPX 1.1
             let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
@@ -211,7 +207,6 @@
                     log("Interacción de compartir cancelada por el usuario.");
                 }
             } else {
-                // Generar blob de descarga forzada para el navegador
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(file);
                 link.download = fileName;
@@ -221,6 +216,18 @@
                 log(`Descarga iniciada. Revise su carpeta de 'Descargas' para el archivo: ${fileName}`);
             }
         }
+
+        // REGISTRO DEL MOTOR OFFLINE (SERVICE WORKER)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(reg => {
+                    console.log('Modo Offline activado.', reg);
+                }).catch(err => {
+                    console.log('Fallo en Modo Offline.', err);
+                });
+            });
+        }
     </script>
 </body>
 </html>
+
