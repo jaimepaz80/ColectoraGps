@@ -18,7 +18,7 @@
         input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
 
         .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin-bottom: 15px; background: #ddd; color: #555; transition: 0.3s; }
-        .status-recording { background: var(--active); color: white; animation: pulse 2s infinite; }
+        .status-recording { animation: pulse 2s infinite; }
         
         .data-panel { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
         .data-row { display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; }
@@ -52,11 +52,13 @@
         <div id="statusBadge" class="status-badge">ESPERANDO INICIO...</div>
 
         <div class="data-panel">
+            <div class="data-row"><span class="label">Tiempo de Medición:</span> <span id="valTime" class="value" style="color: #2c3e50; font-weight: bold;">00:00</span></div>
             <div class="data-row"><span class="label">Latitud:</span> <span id="valLat" class="value">---</span></div>
             <div class="data-row"><span class="label">Longitud:</span> <span id="valLon" class="value">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
             <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
-            <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--accent);">0</span></div>
+            <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active);">0</span></div>
+            <div class="data-row"><span class="label" style="color:var(--accent);">Épocas Rechazadas:</span> <span id="valRechazados" class="value" style="color:var(--accent);">0</span></div>
         </div>
 
         <button id="btnToggle" onclick="toggleRecording()">INICIAR LEVANTAMIENTO</button>
@@ -75,6 +77,11 @@
         let isRecording = false;
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
+        
+        // Variables para el cronómetro y filtros
+        let timerInterval = null;
+        let timeSeconds = 0;
+        let rejectedCount = 0;
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -103,11 +110,24 @@
                 }
                 currentPuntoName = nameVal;
 
+                // Reiniciar contadores y UI
                 trackpoints = [];
+                timeSeconds = 0;
+                rejectedCount = 0;
                 document.getElementById('valPts').innerText = "0";
+                document.getElementById('valRechazados').innerText = "0";
+                document.getElementById('valTime').innerText = "00:00";
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
+                
+                // Iniciar Cronómetro
+                timerInterval = setInterval(() => {
+                    timeSeconds++;
+                    let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
+                    let s = (timeSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('valTime').innerText = `${m}:${s}`;
+                }, 1000);
                 
                 const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
                 watchId = navigator.geolocation.watchPosition(onSuccess, onError, options);
@@ -115,23 +135,33 @@
                 isRecording = true;
                 btnToggle.innerText = "DETENER LEVANTAMIENTO";
                 btnToggle.classList.add("recording");
-                statusBadge.innerText = `GRABANDO: ${currentPuntoName}`;
+                
+                statusBadge.innerText = `BUSCANDO SATÉLITES...`;
                 statusBadge.classList.add("status-recording");
-                log(`Levantamiento iniciado para: ${currentPuntoName}... Buscando satélites.`);
+                statusBadge.style.background = "#f39c12"; // Naranja mientras busca
+                statusBadge.style.color = "white";
+                
+                log(`Levantamiento iniciado para: ${currentPuntoName}... Evaluando señal.`);
 
             } else {
                 navigator.geolocation.clearWatch(watchId);
+                clearInterval(timerInterval);
                 isRecording = false;
+                
                 btnToggle.innerText = "NUEVO LEVANTAMIENTO";
                 btnToggle.classList.remove("recording");
+                
                 statusBadge.innerText = "LEVANTAMIENTO DETENIDO";
                 statusBadge.classList.remove("status-recording");
+                statusBadge.style.background = "#ddd";
+                statusBadge.style.color = "#555";
+                
                 inputName.disabled = false;
                 
                 if(trackpoints.length > 0) {
                     actionButtons.style.display = 'flex';
                     btnDiscard.style.display = 'block';
-                    log(`Punto ${currentPuntoName} finalizado exitosamente. ${trackpoints.length} épocas registradas.`);
+                    log(`Punto ${currentPuntoName} finalizado. ${trackpoints.length} épocas grabadas. ${rejectedCount} descartadas por HDOP.`);
                 } else {
                     log("Grabación detenida. No se detectaron satélites con precisión suficiente.");
                 }
@@ -144,18 +174,34 @@
             const lon = coords.longitude.toFixed(8);
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
             const accuracy = coords.accuracy; 
-            const hdop = (accuracy / 5).toFixed(2); 
+            
+            // Factor 4.0 es el estándar UERE para móviles
+            const hdop = (accuracy / 4.0).toFixed(2); 
             const timeIso = new Date(position.timestamp).toISOString();
 
             document.getElementById('valLat').innerText = lat;
             document.getElementById('valLon').innerText = lon;
             document.getElementById('valEle').innerText = ele;
-            document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m`;
+            document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
-            if(accuracy <= 100) {
-                trackpoints.push({ lat, lon, ele, timeIso, hdop });
-                document.getElementById('valPts').innerText = trackpoints.length;
+            // BARRERA DE CALIDAD (LA GUILLOTINA)
+            if(parseFloat(hdop) > 4.0) {
+                rejectedCount++;
+                document.getElementById('valRechazados').innerText = rejectedCount;
+                
+                statusBadge.innerText = `🔴 HDOP POBRE: ${hdop} (DESCARTANDO)`;
+                statusBadge.style.background = "#e74c3c"; // Rojo
+                statusBadge.style.color = "white";
+                return; // Se detiene aquí, no guarda el punto
             }
+
+            // SI EL HDOP ES BUENO, PROCEDE A GRABAR
+            statusBadge.innerText = `🟢 HDOP ÓPTIMO: ${hdop} (GRABANDO)`;
+            statusBadge.style.background = "#27ae60"; // Verde
+            statusBadge.style.color = "white";
+
+            trackpoints.push({ lat, lon, ele, timeIso, hdop });
+            document.getElementById('valPts').innerText = trackpoints.length;
         }
 
         function onError(err) {
@@ -168,11 +214,16 @@
         function descartar() {
             if(confirm(`Atención: ¿Está seguro de borrar permanentemente los datos medidos para [${currentPuntoName}]?`)) {
                 trackpoints = [];
+                timeSeconds = 0;
+                rejectedCount = 0;
+                document.getElementById('valTime').innerText = "00:00";
                 document.getElementById('valPts').innerText = "0";
+                document.getElementById('valRechazados').innerText = "0";
                 document.getElementById('valLat').innerText = "---";
                 document.getElementById('valLon').innerText = "---";
                 document.getElementById('valEle').innerText = "---";
                 document.getElementById('valAcc').innerText = "---";
+                
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.value = '';
@@ -230,4 +281,5 @@
     </script>
 </body>
 </html>
+
 
