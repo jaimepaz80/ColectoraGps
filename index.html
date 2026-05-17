@@ -17,7 +17,10 @@
         label { font-weight: bold; font-size: 0.85rem; color: #555; display: block; margin-bottom: 5px; }
         input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
 
-        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin-bottom: 15px; background: #ddd; color: #555; transition: 0.3s; }
+        /* CRONÓMETRO GIGANTE */
+        .main-timer { font-size: 3.5rem; font-weight: bold; color: var(--primary); margin: 10px 0; font-family: monospace; letter-spacing: 2px;}
+
+        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 0.85rem; margin-bottom: 15px; background: #ddd; color: #555; transition: 0.3s; width: 80%;}
         .status-recording { animation: pulse 2s infinite; }
         
         .data-panel { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
@@ -49,16 +52,17 @@
             <input type="text" id="puntoName" placeholder="Ejemplo: R-1, Base-P1..." autocomplete="off">
         </div>
 
+        <div id="mainTimer" class="main-timer">00:00</div>
+
         <div id="statusBadge" class="status-badge">ESPERANDO INICIO...</div>
 
         <div class="data-panel">
-            <div class="data-row"><span class="label">Tiempo de Medición:</span> <span id="valTime" class="value" style="color: #2c3e50; font-weight: bold;">00:00</span></div>
             <div class="data-row"><span class="label">Latitud:</span> <span id="valLat" class="value">---</span></div>
             <div class="data-row"><span class="label">Longitud:</span> <span id="valLon" class="value">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
             <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
-            <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active);">0</span></div>
-            <div class="data-row"><span class="label" style="color:var(--accent);">Épocas Rechazadas:</span> <span id="valRechazados" class="value" style="color:var(--accent);">0</span></div>
+            <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active); font-weight:bold;">0</span></div>
+            <div class="data-row"><span class="label" style="color:var(--accent);">Épocas Rechazadas:</span> <span id="valRechazados" class="value" style="color:var(--accent); font-weight:bold;">0</span></div>
         </div>
 
         <button id="btnToggle" onclick="toggleRecording()">INICIAR LEVANTAMIENTO</button>
@@ -87,6 +91,7 @@
         const actionButtons = document.getElementById('actionButtons');
         const btnDiscard = document.getElementById('btnDiscard');
         const statusBadge = document.getElementById('statusBadge');
+        const mainTimer = document.getElementById('mainTimer');
         const logPanel = document.getElementById('log');
         const inputName = document.getElementById('puntoName');
 
@@ -116,7 +121,7 @@
                 rejectedCount = 0;
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
-                document.getElementById('valTime').innerText = "00:00";
+                mainTimer.innerText = "00:00";
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
@@ -126,7 +131,7 @@
                     timeSeconds++;
                     let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
                     let s = (timeSeconds % 60).toString().padStart(2, '0');
-                    document.getElementById('valTime').innerText = `${m}:${s}`;
+                    mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
                 const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
@@ -216,7 +221,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                document.getElementById('valTime').innerText = "00:00";
+                mainTimer.innerText = "00:00";
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
                 document.getElementById('valLat').innerText = "---";
@@ -281,5 +286,3 @@
     </script>
 </body>
 </html>
-
-
