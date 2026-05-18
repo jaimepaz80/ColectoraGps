@@ -13,6 +13,11 @@
         .app-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 500px; width: 100%; text-align: center; }
         h1 { color: var(--primary); font-size: 1.4rem; margin-top: 0; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
         
+        /* BANNER WHATSAPP (SIEMPRE VISIBLE ARRIBA) */
+        .whatsapp-banner { margin-bottom: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #25d366; border-radius: 8px; font-size: 0.85rem; color: #2c3e50; text-align: center; }
+        .whatsapp-btn { display: inline-block; margin-top: 10px; background-color: #25d366; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; transition: 0.3s; font-size: 0.9rem; }
+        .whatsapp-btn:hover { background-color: #128c7e; }
+
         .input-group { text-align: left; margin-bottom: 15px; }
         label { font-weight: bold; font-size: 0.85rem; color: #555; display: block; margin-bottom: 5px; }
         input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
@@ -48,11 +53,6 @@
         #btnDiscard { background: #e74c3c; color: white; display: none; margin-top: 10px; }
 
         #log { background: #111; color: #0f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; height: 100px; overflow-y: auto; text-align: left; margin-top: 15px; }
-        
-        /* BANNER WHATSAPP (Ajustado) */
-        .whatsapp-banner { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #25d366; border-radius: 8px; font-size: 0.85rem; color: #2c3e50; text-align: center; }
-        .whatsapp-btn { display: inline-block; margin-top: 10px; background-color: #25d366; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; transition: 0.3s; font-size: 0.9rem; }
-        .whatsapp-btn:hover { background-color: #128c7e; }
 
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); } }
     </style>
@@ -60,6 +60,12 @@
 <body>
     <div class="app-container">
         <h1>ColectoraGps</h1>
+
+        <div class="whatsapp-banner">
+            <p style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e8449;"><strong>Servicios de Procesamiento Diferencial (GpsJ)</strong></p>
+            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora de datos es libre. Si el Topógrafo requiere realizar cálculos diferenciales de los archivos generados con el Motor GpsJ, contácteme.</p>
+            <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 Contactar por WhatsApp</a>
+        </div>
         
         <div class="input-group">
             <label>Identificador del Punto:</label>
@@ -106,12 +112,6 @@
         </div>
 
         <div id="log">Sistema Web listo. Asigne un nombre al punto y presione Iniciar.</div>
-
-        <div class="whatsapp-banner">
-            <p style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e8449;"><strong>Servicios de Procesamiento Diferencial (GpsJ)</strong></p>
-            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora de datos es libre. Si el Topógrafo requiere realizar mediciones avanzadas y cálculos diferenciales de los archivos generados, contácteme por WhatsApp.</p>
-            <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 Contactar por WhatsApp</a>
-        </div>
 
     </div>
 
@@ -472,7 +472,10 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW Fail', err));
+                // Update checker inyectado para forzar la purga del caché viejo
+                navigator.serviceWorker.register('/sw.js').then(reg => {
+                    reg.update(); 
+                }).catch(err => console.log('SW Fail', err));
             });
         }
     </script>
