@@ -39,7 +39,7 @@
         .panel-promedio h3 { margin: 0 0 10px 0; color: var(--active); font-size: 1.1rem; text-align: center; border-bottom: 1px solid #a3e4d7; padding-bottom: 5px;}
         .prom-val { font-family: monospace; font-weight: bold; color: #117a65; font-size: 1.1rem;}
         
-        /* PANEL LIBRETA EXCEL */
+        /* PANEL LIBRETA EXCEL/DXF */
         .panel-libreta { display: none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
         
         button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
@@ -104,7 +104,10 @@
         <div id="panelLibreta" class="panel-libreta">
             <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
             
-            <button onclick="descargarExcel()" style="background: #27ae60; margin-top: 15px; font-size:0.85rem;">📊 DESCARGAR CSV (EXCEL)</button>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="descargarExcel()" style="margin:0; background: #27ae60; font-size:0.85rem;">📊 CSV (EXCEL)</button>
+                <button onclick="descargarDXF()" style="margin:0; background: #8e44ad; color: white; font-size:0.85rem;">📐 DXF (CAD)</button>
+            </div>
             <button onclick="vaciarLibreta()" style="background: #e74c3c; margin-top: 10px; font-size:0.85rem;">🗑️ VACIAR LIBRETA</button>
         </div>
 
@@ -375,8 +378,69 @@
             log("Libreta descargada a Excel.");
         }
 
+        function descargarDXF() {
+            if(puntosAlmacenados.length === 0) return;
+            
+            // CONSTRUYENDO UN DXF ESTRICTO PARA MÓVILES (Con \r\n de Windows)
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            puntosAlmacenados.forEach(pt => {
+                let e = parseFloat(pt.este);
+                let n = parseFloat(pt.norte);
+                if(e < minX) minX = e; if(e > maxX) maxX = e;
+                if(n < minY) minY = n; if(n > maxY) maxY = n;
+            });
+            minX -= 10; minY -= 10; maxX += 10; maxY += 10;
+            let cx = (minX + maxX) / 2;
+            let cy = (minY + maxY) / 2;
+            let alt = maxY - minY;
+            if(alt === 0) alt = 20;
+
+            let dxf = "  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1015\r\n";
+            dxf += "  9\r\n$EXTMIN\r\n 10\r\n" + minX.toFixed(3) + "\r\n 20\r\n" + minY.toFixed(3) + "\r\n 30\r\n0.0\r\n";
+            dxf += "  9\r\n$EXTMAX\r\n 10\r\n" + maxX.toFixed(3) + "\r\n 20\r\n" + maxY.toFixed(3) + "\r\n 30\r\n0.0\r\n";
+            dxf += "  0\r\nENDSEC\r\n";
+
+            dxf += "  0\r\nSECTION\r\n  2\r\nTABLES\r\n";
+            dxf += "  0\r\nTABLE\r\n  2\r\nVPORT\r\n 70\r\n1\r\n  0\r\nVPORT\r\n  2\r\n*ACTIVE\r\n 70\r\n0\r\n 10\r\n0.0\r\n 20\r\n0.0\r\n 11\r\n1.0\r\n 21\r\n1.0\r\n 12\r\n" + cx.toFixed(3) + "\r\n 22\r\n" + cy.toFixed(3) + "\r\n 40\r\n" + alt.toFixed(3) + "\r\n  0\r\nENDTAB\r\n";
+            dxf += "  0\r\nTABLE\r\n  2\r\nLTYPE\r\n 70\r\n1\r\n  0\r\nLTYPE\r\n  2\r\nCONTINUOUS\r\n 70\r\n0\r\n  3\r\nSolid line\r\n 72\r\n65\r\n 73\r\n0\r\n 40\r\n0.0\r\n  0\r\nENDTAB\r\n";
+            dxf += "  0\r\nTABLE\r\n  2\r\nLAYER\r\n 70\r\n3\r\n  0\r\nLAYER\r\n  2\r\n0\r\n 70\r\n0\r\n 62\r\n7\r\n  6\r\nCONTINUOUS\r\n";
+            dxf += "  0\r\nLAYER\r\n  2\r\nPuntos\r\n 70\r\n0\r\n 62\r\n1\r\n  6\r\nCONTINUOUS\r\n";
+            dxf += "  0\r\nLAYER\r\n  2\r\nEtiquetas\r\n 70\r\n0\r\n 62\r\n2\r\n  6\r\nCONTINUOUS\r\n  0\r\nENDTAB\r\n";
+            dxf += "  0\r\nTABLE\r\n  2\r\nSTYLE\r\n 70\r\n1\r\n  0\r\nSTYLE\r\n  2\r\nSTANDARD\r\n 70\r\n0\r\n 40\r\n0.0\r\n 41\r\n1.0\r\n 50\r\n0.0\r\n 71\r\n0\r\n 42\r\n0.2\r\n  3\r\ntxt\r\n  4\r\n\r\n  0\r\nENDTAB\r\n";
+            dxf += "  0\r\nENDSEC\r\n";
+
+            dxf += "  0\r\nSECTION\r\n  2\r\nENTITIES\r\n";
+
+            puntosAlmacenados.forEach(pt => {
+                dxf += "  0\r\nPOINT\r\n  8\r\nPuntos\r\n 10\r\n" + pt.este + "\r\n 20\r\n" + pt.norte + "\r\n 30\r\n" + pt.cota + "\r\n";
+                dxf += "  0\r\nTEXT\r\n  8\r\nEtiquetas\r\n 10\r\n" + (parseFloat(pt.este)+0.5).toFixed(3) + "\r\n 20\r\n" + (parseFloat(pt.norte)+0.5).toFixed(3) + "\r\n 30\r\n" + pt.cota + "\r\n 40\r\n1.0\r\n  1\r\n" + pt.nombre + "\r\n  7\r\nSTANDARD\r\n";
+            });
+
+            if(puntosAlmacenados.length > 1) {
+                dxf += "  0\r\nPOLYLINE\r\n  8\r\nPuntos\r\n 66\r\n1\r\n 10\r\n0.0\r\n 20\r\n0.0\r\n 30\r\n0.0\r\n 70\r\n8\r\n";
+                puntosAlmacenados.forEach(pt => {
+                    dxf += "  0\r\nVERTEX\r\n  8\r\nPuntos\r\n 10\r\n" + pt.este + "\r\n 20\r\n" + pt.norte + "\r\n 30\r\n" + pt.cota + "\r\n";
+                });
+                dxf += "  0\r\nSEQEND\r\n  8\r\nPuntos\r\n";
+            }
+
+            dxf += "  0\r\nENDSEC\r\n  0\r\nEOF\r\n";
+
+            // Se usa octet-stream para que Android lo guarde como binario puro y no lo corrompa
+            const blob = new Blob([dxf], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Plano_Levantamiento_${new Date().getTime()}.dxf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            log("Archivo DXF generado. Ábralo desde su carpeta de Descargas.");
+        }
+
         function vaciarLibreta() {
-            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel primero.")) {
+            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel o DXF primero.")) {
                 puntosAlmacenados = [];
                 document.getElementById('valMemoria').innerText = "0";
                 panelLibreta.style.display = 'none';
