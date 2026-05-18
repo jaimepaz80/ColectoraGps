@@ -13,7 +13,7 @@
         .app-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 500px; width: 100%; text-align: center; }
         h1 { color: var(--primary); font-size: 1.4rem; margin-top: 0; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
         
-        /* BANNER WHATSAPP (SIEMPRE VISIBLE ARRIBA, TEXTO EXACTO) */
+        /* BANNER WHATSAPP (SIEMPRE VISIBLE ARRIBA) */
         .whatsapp-banner { margin-bottom: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #25d366; border-radius: 8px; font-size: 0.85rem; color: #2c3e50; text-align: center; }
         .whatsapp-btn { display: inline-block; margin-top: 10px; background-color: #25d366; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; transition: 0.3s; font-size: 0.9rem; }
         .whatsapp-btn:hover { background-color: #128c7e; }
@@ -62,8 +62,9 @@
         <h1>ColectoraGps</h1>
 
         <div class="whatsapp-banner">
-            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora es libre. Si el Topógrafo requiere hacer mediciones y cálculos diferenciales, contácteme al WhatsApp.</p>
-            <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 +58 412-1043327</a>
+            <p style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e8449;"><strong>Servicios de Procesamiento Diferencial (GpsJ)</strong></p>
+            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora de datos es libre. Si el Topógrafo requiere realizar cálculos diferenciales de los archivos generados con el Motor GpsJ, contácteme.</p>
+            <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 Contactar por WhatsApp</a>
         </div>
         
         <div class="input-group">
@@ -380,34 +381,34 @@
         function descargarDXF() {
             if(puntosAlmacenados.length === 0) return;
             
-            // INYECCIÓN DE CABECERA OFICIAL AUTOCAD 2000 (AC1015) PARA EVITAR RECHAZOS
-            let dxf = "  0\nSECTION\n  2\nHEADER\n  9\n$ACADVER\n  1\nAC1015\n  0\nENDSEC\n";
-            dxf += "  0\nSECTION\n  2\nENTITIES\n";
+            // DXF APLASTADO, SIN ESPACIOS EN BLANCO, CABECERA AC1015 ESTRICTA
+            let dxf = "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n0\nENDSEC\n";
+            dxf += "0\nSECTION\n2\nENTITIES\n";
 
             puntosAlmacenados.forEach(pt => {
-                dxf += "  0\nPOINT\n  8\nPuntos\n";
-                dxf += ` 10\n${pt.este}\n 20\n${pt.norte}\n 30\n${pt.cota}\n`;
+                dxf += "0\nPOINT\n8\nPuntos\n";
+                dxf += `10\n${pt.este}\n20\n${pt.norte}\n30\n${pt.cota}\n`;
 
-                dxf += "  0\nTEXT\n  8\nEtiquetas\n";
-                dxf += ` 10\n${parseFloat(pt.este) + 0.5}\n 20\n${parseFloat(pt.norte) + 0.5}\n 30\n${pt.cota}\n`;
-                dxf += " 40\n1.0\n"; 
-                dxf += `  1\n${pt.nombre}\n`; 
+                dxf += "0\nTEXT\n8\nEtiquetas\n";
+                dxf += `10\n${parseFloat(pt.este) + 0.5}\n20\n${parseFloat(pt.norte) + 0.5}\n30\n${pt.cota}\n`;
+                dxf += "40\n1.0\n"; 
+                dxf += `1\n${pt.nombre}\n`; 
             });
 
             if(puntosAlmacenados.length > 1) {
-                dxf += "  0\nLWPOLYLINE\n  8\nPoligono\n";
+                dxf += "0\nLWPOLYLINE\n8\nPoligono\n";
                 dxf += "100\nAcDbEntity\n100\nAcDbPolyline\n";
-                dxf += ` 90\n${puntosAlmacenados.length}\n`; 
-                dxf += " 70\n0\n"; 
+                dxf += `90\n${puntosAlmacenados.length}\n`; 
+                dxf += "70\n0\n"; 
                 puntosAlmacenados.forEach(pt => {
-                    dxf += ` 10\n${pt.este}\n 20\n${pt.norte}\n`;
+                    dxf += `10\n${pt.este}\n20\n${pt.norte}\n`;
                 });
             }
 
-            dxf += "  0\nENDSEC\n  0\nEOF\n";
+            dxf += "0\nENDSEC\n0\nEOF\n";
 
-            // MIME TYPE OFICIAL PARA FORZAR LECTURA CAD EN EL TELÉFONO
-            const blob = new Blob([dxf], { type: 'application/dxf' });
+            // MIME Type seguro para forzar archivo binario en Android
+            const blob = new Blob([dxf], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -416,7 +417,7 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            log("Archivo DXF (AutoCAD) generado y descargado con éxito.");
+            log("Archivo DXF generado. Ábralo desde su carpeta de Descargas.");
         }
 
         function vaciarLibreta() {
@@ -460,7 +461,6 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // Forzar purga de caché del Service Worker en cada recarga
                 navigator.serviceWorker.register('/sw.js').then(reg => {
                     reg.update();
                 }).catch(err => console.log('SW Fail', err));
