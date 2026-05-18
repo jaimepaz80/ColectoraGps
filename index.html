@@ -28,6 +28,14 @@
         .data-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .label { font-weight: bold; color: var(--primary); }
         .value { font-family: monospace; font-size: 1rem; color: #2980b9; }
+
+        /* PANEL DE PROMEDIO AUTÓNOMO */
+        .panel-promedio { display: none; background: #e8f8f5; border: 2px solid var(--active); padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.95rem; }
+        .panel-promedio h3 { margin: 0 0 10px 0; color: var(--active); font-size: 1.1rem; text-align: center; border-bottom: 1px solid #a3e4d7; padding-bottom: 5px;}
+        .prom-val { font-family: monospace; font-weight: bold; color: #117a65; font-size: 1.1rem;}
+        
+        /* PANEL LIBRETA EXCEL */
+        .panel-libreta { display: none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
         
         button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
         #btnToggle { background: var(--primary); color: white; }
@@ -35,9 +43,10 @@
         
         .action-buttons { display: none; gap: 10px; margin-top: 10px; }
         .btn-half { width: 50%; padding: 12px; font-size: 0.85rem;}
-        #btnExport { background: #3498db; color: white; margin-bottom: 0;}
+        #btnExport { background: #34495e; color: white; margin-bottom: 0;}
         #btnShare { background: #27ae60; color: white; margin-bottom: 0;}
         #btnDiscard { background: #e74c3c; color: white; display: none; margin-top: 10px; }
+        #btnExcel { background: #2980b9; color: white; margin-top: 10px; }
 
         #log { background: #111; color: #0f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; height: 100px; overflow-y: auto; text-align: left; margin-top: 15px; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); } }
@@ -53,12 +62,20 @@
         </div>
 
         <div id="mainTimer" class="main-timer">00:00</div>
-
         <div id="statusBadge" class="status-badge">ESPERANDO INICIO...</div>
 
+        <div id="panelPromedio" class="panel-promedio">
+            <h3>📍 PROMEDIO AUTÓNOMO (UTM)</h3>
+            <div class="data-row"><span class="label">Norte (Y):</span> <span id="promN" class="prom-val">---</span></div>
+            <div class="data-row"><span class="label">Este (X):</span> <span id="promE" class="prom-val">---</span></div>
+            <div class="data-row"><span class="label">Cota (Z):</span> <span id="promZ" class="prom-val">---</span></div>
+            <div class="data-row"><span class="label">Huso/Hem:</span> <span id="promHuso" class="prom-val" style="color:#333;">---</span></div>
+            <div class="data-row"><span class="label" style="color:var(--accent);">Precisión (RMS):</span> <span id="promAcc" class="prom-val" style="color:var(--accent);">---</span></div>
+        </div>
+
         <div class="data-panel">
-            <div class="data-row"><span class="label">Latitud:</span> <span id="valLat" class="value">---</span></div>
-            <div class="data-row"><span class="label">Longitud:</span> <span id="valLon" class="value">---</span></div>
+            <div class="data-row"><span class="label" style="color:#2980b9;">Norte (Y) Vivo:</span> <span id="valNorte" class="value" style="color:#2980b9;">---</span></div>
+            <div class="data-row"><span class="label" style="color:#2980b9;">Este (X) Vivo:</span> <span id="valEste" class="value" style="color:#2980b9;">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
             <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
             <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active); font-weight:bold;">0</span></div>
@@ -68,10 +85,15 @@
         <button id="btnToggle" onclick="toggleRecording()">INICIAR LEVANTAMIENTO</button>
         
         <div id="actionButtons" class="action-buttons">
-            <button id="btnExport" class="btn-half" onclick="exportGPX(false)">💾 DESCARGAR</button>
-            <button id="btnShare" class="btn-half" onclick="exportGPX(true)">📲 COMPARTIR</button>
+            <button id="btnExport" class="btn-half" onclick="exportGPX(false)">💾 GPX PARA NUBE</button>
+            <button id="btnShare" class="btn-half" onclick="exportGPX(true)">📲 COMPARTIR GPX</button>
         </div>
-        <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR (BORRAR)</button>
+        <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR MEDICIÓN ACTUAL</button>
+
+        <div id="panelLibreta" class="panel-libreta">
+            <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Memoria Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
+            <button id="btnExcel" onclick="descargarExcel()">📊 DESCARGAR EXCEL Y REINICIAR</button>
+        </div>
 
         <div id="log">Sistema Web listo. Asigne un nombre al punto y presione Iniciar.</div>
     </div>
@@ -82,6 +104,9 @@
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
         
+        // Memoria global para la libreta de Excel
+        let puntosAlmacenados = [];
+
         // Variables para el cronómetro y filtros
         let timerInterval = null;
         let timeSeconds = 0;
@@ -94,10 +119,105 @@
         const mainTimer = document.getElementById('mainTimer');
         const logPanel = document.getElementById('log');
         const inputName = document.getElementById('puntoName');
+        const panelPromedio = document.getElementById('panelPromedio');
+        const panelLibreta = document.getElementById('panelLibreta');
 
         function log(msg) {
             logPanel.innerHTML += `\n> ${msg}`;
             logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        // --- MATEMÁTICA GEODÉSICA --- //
+        function latLonToUTM(lat, lon) {
+            const a = 6378137.0;
+            const eccSquared = 0.00669438;
+            const k0 = 0.9996;
+            const zone = Math.floor((lon + 180) / 6) + 1;
+            const lonOrigin = (zone - 1) * 6 - 180 + 3;
+            const lonOriginRad = lonOrigin * Math.PI / 180.0;
+            const latRad = lat * Math.PI / 180.0;
+            const lonRad = lon * Math.PI / 180.0;
+            const eccPrimeSquared = eccSquared / (1 - eccSquared);
+            const N = a / Math.sqrt(1 - eccSquared * Math.sin(latRad) * Math.sin(latRad));
+            const T = Math.tan(latRad) * Math.tan(latRad);
+            const C = eccPrimeSquared * Math.cos(latRad) * Math.cos(latRad);
+            const A = Math.cos(latRad) * (lonRad - lonOriginRad);
+            const M = a * ((1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * Math.pow(eccSquared, 3) / 256) * latRad
+                - (3 * eccSquared / 8 + 3 * eccSquared * eccSquared / 32 + 45 * Math.pow(eccSquared, 3) / 1024) * Math.sin(2 * latRad)
+                + (15 * eccSquared * eccSquared / 256 + 45 * Math.pow(eccSquared, 3) / 1024) * Math.sin(4 * latRad)
+                - (35 * Math.pow(eccSquared, 3) / 3072) * Math.sin(6 * latRad));
+            const UTMEasting = (k0 * N * (A + (1 - T + C) * Math.pow(A, 3) / 6 + (5 - 18 * T + T * T + 72 * C - 58 * eccPrimeSquared) * Math.pow(A, 5) / 120) + 500000.0);
+            let UTMNorthing = (k0 * (M + N * Math.tan(latRad) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * Math.pow(A, 4) / 24 + (61 - 58 * T + T * T + 600 * C - 330 * eccPrimeSquared) * Math.pow(A, 6) / 720)));
+            if (lat < 0) UTMNorthing += 10000000.0; 
+            return { e: UTMEasting, n: UTMNorthing, zone: zone, hemi: lat >= 0 ? 'N' : 'S' };
+        }
+
+        function getMedian(arr) {
+            const sorted = [...arr].sort((a, b) => a - b);
+            const half = Math.floor(sorted.length / 2);
+            return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2.0;
+        }
+
+        function filterMAD(values) {
+            if (values.length === 0) return [];
+            const median = getMedian(values);
+            const devs = values.map(v => Math.abs(v - median));
+            let mad = getMedian(devs);
+            if (mad < 0.000001) mad = 0.000001; 
+            return values.filter(v => Math.abs(v - median) <= 6 * mad);
+        }
+
+        function calcularPromedioRobusto() {
+            if (trackpoints.length === 0) return;
+
+            let lats = trackpoints.map(p => parseFloat(p.lat));
+            let lons = trackpoints.map(p => parseFloat(p.lon));
+            let eles = trackpoints.map(p => parseFloat(p.ele));
+
+            let fLats = filterMAD(lats);
+            let fLons = filterMAD(lons);
+            let fEles = filterMAD(eles);
+
+            if(fLats.length === 0) fLats = lats;
+            if(fLons.length === 0) fLons = lons;
+            if(fEles.length === 0) fEles = eles;
+
+            let finalAvgLat = fLats.reduce((a, b) => a + b, 0) / fLats.length;
+            let finalAvgLon = fLons.reduce((a, b) => a + b, 0) / fLons.length;
+            let finalAvgEle = fEles.reduce((a, b) => a + b, 0) / fEles.length;
+
+            let finalUTM = latLonToUTM(finalAvgLat, finalAvgLon);
+
+            let sumSq = 0;
+            trackpoints.forEach(p => {
+                let dN = (parseFloat(p.lat) - finalAvgLat) * 111320.0;
+                let dE = (parseFloat(p.lon) - finalAvgLon) * 111320.0 * Math.cos(finalAvgLat * Math.PI/180.0);
+                sumSq += (dN*dN + dE*dE);
+            });
+            let rms = Math.sqrt(sumSq / trackpoints.length);
+
+            // Mostrar en UI
+            panelPromedio.style.display = 'block';
+            document.getElementById('promN').innerText = finalUTM.n.toFixed(3);
+            document.getElementById('promE').innerText = finalUTM.e.toFixed(3);
+            document.getElementById('promZ').innerText = finalAvgEle.toFixed(3) + " m";
+            document.getElementById('promHuso').innerText = finalUTM.zone + " " + finalUTM.hemi;
+            document.getElementById('promAcc').innerText = "± " + rms.toFixed(2) + " m";
+
+            // Guardar en la libreta para el Excel
+            puntosAlmacenados.push({
+                nombre: currentPuntoName,
+                norte: finalUTM.n.toFixed(3),
+                este: finalUTM.e.toFixed(3),
+                cota: finalAvgEle.toFixed(3),
+                huso: finalUTM.zone + finalUTM.hemi,
+                rms: rms.toFixed(3),
+                epocas: trackpoints.length
+            });
+            
+            // Actualizar contador de memoria
+            document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
+            panelLibreta.style.display = 'block';
         }
 
         function toggleRecording() {
@@ -109,24 +229,24 @@
                 
                 let nameVal = inputName.value.trim();
                 if(!nameVal) { 
-                    alert("Control de Calidad: Por favor, escriba un Identificador para el Punto antes de medir."); 
+                    alert("Control de Calidad: Escriba un Identificador para el Punto."); 
                     inputName.focus(); 
                     return; 
                 }
                 currentPuntoName = nameVal;
 
-                // Reiniciar contadores y UI
+                // Reiniciar variables para el nuevo punto
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
                 mainTimer.innerText = "00:00";
+                
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
                 
-                // Iniciar Cronómetro
                 timerInterval = setInterval(() => {
                     timeSeconds++;
                     let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
@@ -143,10 +263,10 @@
                 
                 statusBadge.innerText = `BUSCANDO SATÉLITES...`;
                 statusBadge.classList.add("status-recording");
-                statusBadge.style.background = "#f39c12"; // Naranja mientras busca
+                statusBadge.style.background = "#f39c12"; 
                 statusBadge.style.color = "white";
                 
-                log(`Levantamiento iniciado para: ${currentPuntoName}... Evaluando señal.`);
+                log(`Levantamiento ${currentPuntoName} iniciado...`);
 
             } else {
                 navigator.geolocation.clearWatch(watchId);
@@ -162,81 +282,113 @@
                 statusBadge.style.color = "#555";
                 
                 inputName.disabled = false;
+                inputName.value = ''; // Limpiar cajón para el siguiente
                 
                 if(trackpoints.length > 0) {
+                    calcularPromedioRobusto();
                     actionButtons.style.display = 'flex';
                     btnDiscard.style.display = 'block';
-                    log(`Punto ${currentPuntoName} finalizado. ${trackpoints.length} épocas grabadas. ${rejectedCount} descartadas por HDOP.`);
-                } else {
-                    log("Grabación detenida. No se detectaron satélites con precisión suficiente.");
+                    log(`Punto finalizado. Calculado y guardado en memoria Libreta.`);
                 }
             }
         }
 
         function onSuccess(position) {
             const coords = position.coords;
-            const lat = coords.latitude.toFixed(8);
-            const lon = coords.longitude.toFixed(8);
+            const lat = coords.latitude;
+            const lon = coords.longitude;
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
             const accuracy = coords.accuracy; 
             
-            // Factor 4.0 es el estándar UERE para móviles
             const hdop = (accuracy / 4.0).toFixed(2); 
             const timeIso = new Date(position.timestamp).toISOString();
 
-            document.getElementById('valLat').innerText = lat;
-            document.getElementById('valLon').innerText = lon;
+            // Cálculos UTM en Vivo
+            const utmVivo = latLonToUTM(lat, lon);
+            document.getElementById('valNorte').innerText = utmVivo.n.toFixed(3);
+            document.getElementById('valEste').innerText = utmVivo.e.toFixed(3);
             document.getElementById('valEle').innerText = ele;
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
-            // BARRERA DE CALIDAD (LA GUILLOTINA)
             if(parseFloat(hdop) > 4.0) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
-                
                 statusBadge.innerText = `🔴 HDOP POBRE: ${hdop} (DESCARTANDO)`;
-                statusBadge.style.background = "#e74c3c"; // Rojo
+                statusBadge.style.background = "#e74c3c";
                 statusBadge.style.color = "white";
-                return; // Se detiene aquí, no guarda el punto
+                return; 
             }
 
-            // SI EL HDOP ES BUENO, PROCEDE A GRABAR
             statusBadge.innerText = `🟢 HDOP ÓPTIMO: ${hdop} (GRABANDO)`;
-            statusBadge.style.background = "#27ae60"; // Verde
+            statusBadge.style.background = "#27ae60";
             statusBadge.style.color = "white";
 
-            trackpoints.push({ lat, lon, ele, timeIso, hdop });
+            trackpoints.push({ lat: lat.toFixed(8), lon: lon.toFixed(8), ele, timeIso, hdop });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
 
         function onError(err) {
-            log(`ERROR GPS (${err.code}): ${err.message}`);
-            if(err.code === 1) {
-                alert("Permiso Denegado: Debe autorizar el uso de Ubicación en su navegador web.");
-            }
+            log(`ERROR GPS: ${err.message}`);
         }
 
         function descartar() {
-            if(confirm(`Atención: ¿Está seguro de borrar permanentemente los datos medidos para [${currentPuntoName}]?`)) {
+            if(confirm(`¿Borrar permanentemente el punto que acaba de medir?`)) {
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
                 mainTimer.innerText = "00:00";
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
-                document.getElementById('valLat').innerText = "---";
-                document.getElementById('valLon').innerText = "---";
-                document.getElementById('valEle').innerText = "---";
-                document.getElementById('valAcc').innerText = "---";
+                document.getElementById('valNorte').innerText = "---";
+                document.getElementById('valEste').innerText = "---";
                 
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
-                inputName.value = '';
-                log("Medición eliminada. El sistema está listo para registrar un nuevo punto.");
+                
+                // Si descarta, quitamos el último punto añadido a la libreta
+                if(puntosAlmacenados.length > 0) {
+                    puntosAlmacenados.pop();
+                    document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
+                    if(puntosAlmacenados.length === 0) panelLibreta.style.display = 'none';
+                }
+                log("Medición actual eliminada.");
             }
         }
 
+        // --- EXPORTAR A EXCEL (CSV) ---
+        function descargarExcel() {
+            if(puntosAlmacenados.length === 0) return;
+            
+            // Cabeceras del CSV
+            let csvData = "Identificador,Norte (Y),Este (X),Cota (Z),Huso,Precision_RMS(m),Epocas_Grabadas\n";
+            
+            // Llenar filas
+            puntosAlmacenados.forEach(pt => {
+                csvData += `${pt.nombre},${pt.norte},${pt.este},${pt.cota},${pt.huso},${pt.rms},${pt.epocas}\n`;
+            });
+
+            // Forzar descarga
+            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Libreta_Topografica_${new Date().getTime()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // REINICIAR MEMORIA
+            puntosAlmacenados = [];
+            document.getElementById('valMemoria').innerText = "0";
+            panelLibreta.style.display = 'none';
+            panelPromedio.style.display = 'none';
+            log("Libreta descargada a Excel y Memoria reiniciada a cero.");
+        }
+
+        // --- EXPORTAR A GPX CRUDO PARA LA NUBE (GPSJ) ---
         function generarGPXString() {
+            // El GPX vuelve a ser limpio y crudo para que Vercel lo lea perfectamente
             let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
@@ -253,15 +405,8 @@
 
             if (share && navigator.share) {
                 try {
-                    await navigator.share({
-                        title: `Levantamiento GNSS: ${currentPuntoName}`,
-                        text: `Adjunto archivo topográfico GPX del punto [${currentPuntoName}] generado por ColectoraGps.`,
-                        files: [file]
-                    });
-                    log("El archivo GPX ha sido enviado.");
-                } catch (e) {
-                    log("Interacción de compartir cancelada por el usuario.");
-                }
+                    await navigator.share({ title: fileName, files: [file] });
+                } catch (e) { log("Compartir cancelado."); }
             } else {
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(file);
@@ -269,18 +414,12 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                log(`Descarga iniciada. Revise su carpeta de 'Descargas' para el archivo: ${fileName}`);
             }
         }
 
-        // REGISTRO DEL MOTOR OFFLINE (SERVICE WORKER)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').then(reg => {
-                    console.log('Modo Offline activado.', reg);
-                }).catch(err => {
-                    console.log('Fallo en Modo Offline.', err);
-                });
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW Fail', err));
             });
         }
     </script>
