@@ -34,7 +34,7 @@
         .panel-promedio h3 { margin: 0 0 10px 0; color: var(--active); font-size: 1.1rem; text-align: center; border-bottom: 1px solid #a3e4d7; padding-bottom: 5px;}
         .prom-val { font-family: monospace; font-weight: bold; color: #117a65; font-size: 1.1rem;}
         
-        /* PANEL LIBRETA EXCEL */
+        /* PANEL LIBRETA EXCEL/DXF */
         .panel-libreta { display: none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
         
         button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
@@ -46,9 +46,14 @@
         #btnExport { background: #34495e; color: white; margin-bottom: 0;}
         #btnShare { background: #27ae60; color: white; margin-bottom: 0;}
         #btnDiscard { background: #e74c3c; color: white; display: none; margin-top: 10px; }
-        #btnExcel { background: #2980b9; color: white; margin-top: 10px; }
 
         #log { background: #111; color: #0f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.75rem; height: 100px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        
+        /* BANNER WHATSAPP (NUEVO) */
+        .whatsapp-banner { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #25d366; border-radius: 8px; font-size: 0.85rem; color: #2c3e50; text-align: center; }
+        .whatsapp-btn { display: inline-block; margin-top: 10px; background-color: #25d366; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; transition: 0.3s; font-size: 0.9rem; }
+        .whatsapp-btn:hover { background-color: #128c7e; }
+
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); } }
     </style>
 </head>
@@ -91,11 +96,23 @@
         <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR MEDICIÓN ACTUAL</button>
 
         <div id="panelLibreta" class="panel-libreta">
-            <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Memoria Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
-            <button id="btnExcel" onclick="descargarExcel()">📊 DESCARGAR EXCEL Y REINICIAR</button>
+            <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="descargarExcel()" style="margin:0; background: #27ae60; font-size:0.85rem;">📊 CSV (EXCEL)</button>
+                <button onclick="descargarDXF()" style="margin:0; background: #8e44ad; color: white; font-size:0.85rem;">📐 DXF (CAD)</button>
+            </div>
+            <button onclick="vaciarLibreta()" style="background: #e74c3c; margin-top: 10px; font-size:0.85rem;">🗑️ VACIAR LIBRETA</button>
         </div>
 
         <div id="log">Sistema Web listo. Asigne un nombre al punto y presione Iniciar.</div>
+
+        <div class="whatsapp-banner">
+            <p style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e8449;"><strong>¿Requiere cálculos diferenciales y precisión milimétrica?</strong></p>
+            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora es libre. Si el Topógrafo requiere hacer cálculos diferenciales con el Motor GpsJ para proyectos de alta precisión, contácteme por WhatsApp.</p>
+            <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 Contactar Soporte GpsJ</a>
+        </div>
+
     </div>
 
     <script>
@@ -104,7 +121,7 @@
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
         
-        // Memoria global para la libreta de Excel
+        // Memoria global para la libreta
         let puntosAlmacenados = [];
 
         // Variables para el cronómetro y filtros
@@ -204,7 +221,7 @@
             document.getElementById('promHuso').innerText = finalUTM.zone + " " + finalUTM.hemi;
             document.getElementById('promAcc').innerText = "± " + rms.toFixed(2) + " m";
 
-            // Guardar en la libreta para el Excel
+            // Guardar en la libreta para el Excel/DXF
             puntosAlmacenados.push({
                 nombre: currentPuntoName,
                 norte: finalUTM.n.toFixed(3),
@@ -215,7 +232,6 @@
                 epocas: trackpoints.length
             });
             
-            // Actualizar contador de memoria
             document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
             panelLibreta.style.display = 'block';
         }
@@ -282,7 +298,7 @@
                 statusBadge.style.color = "#555";
                 
                 inputName.disabled = false;
-                inputName.value = ''; // Limpiar cajón para el siguiente
+                inputName.value = ''; 
                 
                 if(trackpoints.length > 0) {
                     calcularPromedioRobusto();
@@ -345,7 +361,6 @@
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 
-                // Si descarta, quitamos el último punto añadido a la libreta
                 if(puntosAlmacenados.length > 0) {
                     puntosAlmacenados.pop();
                     document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
@@ -358,16 +373,10 @@
         // --- EXPORTAR A EXCEL (CSV) ---
         function descargarExcel() {
             if(puntosAlmacenados.length === 0) return;
-            
-            // Cabeceras del CSV
             let csvData = "Identificador,Norte (Y),Este (X),Cota (Z),Huso,Precision_RMS(m),Epocas_Grabadas\n";
-            
-            // Llenar filas
             puntosAlmacenados.forEach(pt => {
                 csvData += `${pt.nombre},${pt.norte},${pt.este},${pt.cota},${pt.huso},${pt.rms},${pt.epocas}\n`;
             });
-
-            // Forzar descarga
             const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -377,18 +386,62 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            log("Libreta descargada a Excel.");
+        }
 
-            // REINICIAR MEMORIA
-            puntosAlmacenados = [];
-            document.getElementById('valMemoria').innerText = "0";
-            panelLibreta.style.display = 'none';
-            panelPromedio.style.display = 'none';
-            log("Libreta descargada a Excel y Memoria reiniciada a cero.");
+        // --- EXPORTAR A DXF (MOTOR CAD) ---
+        function descargarDXF() {
+            if(puntosAlmacenados.length === 0) return;
+            
+            let dxf = "0\nSECTION\n2\nENTITIES\n";
+
+            puntosAlmacenados.forEach(pt => {
+                dxf += "0\nPOINT\n8\nPuntos\n";
+                dxf += `10\n${pt.este}\n20\n${pt.norte}\n30\n${pt.cota}\n`;
+
+                dxf += "0\nTEXT\n8\nEtiquetas\n";
+                dxf += `10\n${parseFloat(pt.este) + 0.5}\n20\n${parseFloat(pt.norte) + 0.5}\n30\n${pt.cota}\n`;
+                dxf += "40\n1.0\n"; 
+                dxf += `1\n${pt.nombre}\n`; 
+            });
+
+            if(puntosAlmacenados.length > 1) {
+                dxf += "0\nLWPOLYLINE\n8\nPoligono\n";
+                dxf += "100\nAcDbEntity\n100\nAcDbPolyline\n";
+                dxf += `90\n${puntosAlmacenados.length}\n`; 
+                dxf += "70\n0\n"; 
+                puntosAlmacenados.forEach(pt => {
+                    dxf += `10\n${pt.este}\n20\n${pt.norte}\n`;
+                });
+            }
+
+            dxf += "0\nENDSEC\n0\nEOF\n";
+
+            const blob = new Blob([dxf], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Plano_Levantamiento_${new Date().getTime()}.dxf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            log("Archivo DXF generado y descargado con éxito.");
+        }
+
+        // --- VACIAR LIBRETA ---
+        function vaciarLibreta() {
+            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel o DXF primero.")) {
+                puntosAlmacenados = [];
+                document.getElementById('valMemoria').innerText = "0";
+                panelLibreta.style.display = 'none';
+                panelPromedio.style.display = 'none';
+                log("Memoria de libreta reiniciada a cero.");
+            }
         }
 
         // --- EXPORTAR A GPX CRUDO PARA LA NUBE (GPSJ) ---
         function generarGPXString() {
-            // El GPX vuelve a ser limpio y crudo para que Vercel lo lea perfectamente
             let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
