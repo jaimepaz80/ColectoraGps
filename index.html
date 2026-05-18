@@ -39,7 +39,7 @@
         .panel-promedio h3 { margin: 0 0 10px 0; color: var(--active); font-size: 1.1rem; text-align: center; border-bottom: 1px solid #a3e4d7; padding-bottom: 5px;}
         .prom-val { font-family: monospace; font-weight: bold; color: #117a65; font-size: 1.1rem;}
         
-        /* PANEL LIBRETA EXCEL/DXF */
+        /* PANEL LIBRETA EXCEL */
         .panel-libreta { display: none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
         
         button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
@@ -104,10 +104,7 @@
         <div id="panelLibreta" class="panel-libreta">
             <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
             
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button onclick="descargarExcel()" style="margin:0; background: #27ae60; font-size:0.85rem;">📊 CSV (EXCEL)</button>
-                <button onclick="descargarDXF()" style="margin:0; background: #8e44ad; color: white; font-size:0.85rem;">📐 DXF (CAD)</button>
-            </div>
+            <button onclick="descargarExcel()" style="background: #27ae60; margin-top: 15px; font-size:0.85rem;">📊 DESCARGAR CSV (EXCEL)</button>
             <button onclick="vaciarLibreta()" style="background: #e74c3c; margin-top: 10px; font-size:0.85rem;">🗑️ VACIAR LIBRETA</button>
         </div>
 
@@ -378,50 +375,8 @@
             log("Libreta descargada a Excel.");
         }
 
-        function descargarDXF() {
-            if(puntosAlmacenados.length === 0) return;
-            
-            // DXF APLASTADO, SIN ESPACIOS EN BLANCO, CABECERA AC1015 ESTRICTA
-            let dxf = "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n0\nENDSEC\n";
-            dxf += "0\nSECTION\n2\nENTITIES\n";
-
-            puntosAlmacenados.forEach(pt => {
-                dxf += "0\nPOINT\n8\nPuntos\n";
-                dxf += `10\n${pt.este}\n20\n${pt.norte}\n30\n${pt.cota}\n`;
-
-                dxf += "0\nTEXT\n8\nEtiquetas\n";
-                dxf += `10\n${parseFloat(pt.este) + 0.5}\n20\n${parseFloat(pt.norte) + 0.5}\n30\n${pt.cota}\n`;
-                dxf += "40\n1.0\n"; 
-                dxf += `1\n${pt.nombre}\n`; 
-            });
-
-            if(puntosAlmacenados.length > 1) {
-                dxf += "0\nLWPOLYLINE\n8\nPoligono\n";
-                dxf += "100\nAcDbEntity\n100\nAcDbPolyline\n";
-                dxf += `90\n${puntosAlmacenados.length}\n`; 
-                dxf += "70\n0\n"; 
-                puntosAlmacenados.forEach(pt => {
-                    dxf += `10\n${pt.este}\n20\n${pt.norte}\n`;
-                });
-            }
-
-            dxf += "0\nENDSEC\n0\nEOF\n";
-
-            // MIME Type seguro para forzar archivo binario en Android
-            const blob = new Blob([dxf], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Plano_Levantamiento_${new Date().getTime()}.dxf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            log("Archivo DXF generado. Ábralo desde su carpeta de Descargas.");
-        }
-
         function vaciarLibreta() {
-            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel o DXF primero.")) {
+            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel primero.")) {
                 puntosAlmacenados = [];
                 document.getElementById('valMemoria').innerText = "0";
                 panelLibreta.style.display = 'none';
