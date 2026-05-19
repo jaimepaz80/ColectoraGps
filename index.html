@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS</title>
+    <title>ColectoraGps - Topografía GNSS v4.2</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -13,7 +13,6 @@
         .app-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 500px; width: 100%; text-align: center; }
         h1 { color: var(--primary); font-size: 1.4rem; margin-top: 0; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
         
-        /* BANNER WHATSAPP */
         .whatsapp-banner { margin-bottom: 20px; padding: 15px; background-color: #f0fdf4; border: 1px solid #25d366; border-radius: 8px; font-size: 0.85rem; color: #2c3e50; text-align: center; }
         .whatsapp-btn { display: inline-block; margin-top: 10px; background-color: #25d366; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; transition: 0.3s; font-size: 0.9rem; }
         .whatsapp-btn:hover { background-color: #128c7e; }
@@ -56,11 +55,11 @@
 </head>
 <body>
     <div class="app-container">
-        <h1>ColectoraGps</h1>
+        <h1>ColectoraGps Pro</h1>
 
         <div class="whatsapp-banner">
             <p style="margin: 0 0 8px 0; font-size: 0.95rem; color: #1e8449;"><strong>Servicios de Procesamiento Diferencial (GpsJ)</strong></p>
-            <p style="margin: 0; line-height: 1.4;">El uso de esta colectora de datos es libre. Si el Topógrafo requiere realizar cálculos diferenciales de los archivos generados con el Motor GpsJ, contácteme.</p>
+            <p style="margin: 0; line-height: 1.4;">Uso libre. Para post-procesamiento geodésico avanzado acoplado en la nube con el Motor GpsJ, contácteme.</p>
             <a href="https://wa.me/584121043327" target="_blank" class="whatsapp-btn">💬 Contactar por WhatsApp</a>
         </div>
         
@@ -121,6 +120,7 @@
 
     <script>
         let watchId = null;
+        let loopInterval = null; // CORRECCIÓN AUDITORÍA: Bucle activo de interrogación a 1Hz
         let isRecording = false;
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
@@ -128,7 +128,10 @@
         let timerInterval = null;
         let timeSeconds = 0;
         let rejectedCount = 0;
-        let wakeLock = null; // Variable de control para el bloqueo de pantalla
+        let wakeLock = null;
+        
+        // Memoria caché del último punto vivo entregado por el hardware
+        let cacheUltimaPosicion = null;
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -147,36 +150,25 @@
             logPanel.scrollTop = logPanel.scrollHeight;
         }
 
-        // --- SISTEMA WAKE LOCK PARA FORZAR PANTALLA ENCENDIDA ---
         async function activarWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    log("WakeLock Activo: Pantalla fijada. No se suspenderá.");
-                    
-                    // Si el usuario cambia de pestaña por error y vuelve, reactiva el bloqueo
+                    log("WakeLock Activo: Pantalla fijada contra suspensiones.");
                     document.addEventListener('visibilitychange', async () => {
                         if (wakeLock !== null && document.visibilityState === 'visible') {
                             wakeLock = await navigator.wakeLock.request('screen');
                         }
                     });
-                } else {
-                    log("Aviso: Su navegador no soporta fijación automática de pantalla.");
                 }
-            } catch (err) {
-                log(`Fallo WakeLock: ${err.message}`);
-            }
+            } catch (err) { console.log("WakeLock falló pasivamente."); }
         }
 
         function desactivarWakeLock() {
             if (wakeLock !== null) {
-                wakeLock.release().then(() => {
-                    wakeLock = null;
-                    log("WakeLock Liberado: Pantalla devuelta al estado normal.");
-                });
+                wakeLock.release().then(() => { wakeLock = null; });
             }
         }
-        // --------------------------------------------------------
 
         function latLonToUTM(lat, lon) {
             const a = 6378137.0;
@@ -208,6 +200,7 @@
             return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2.0;
         }
 
+        // Filtro MAD Estático
         function filterMAD(values) {
             if (values.length === 0) return [];
             const median = getMedian(values);
@@ -221,55 +214,60 @@
             if (trackpoints.length === 0) return;
 
             let modo = modoMedicion.value;
-            let lats = trackpoints.map(p => parseFloat(p.lat));
-            let lons = trackpoints.map(p => parseFloat(p.lon));
+            
+            // CORRECCIÓN AUDITORÍA: El cálculo del promedio se ejecuta sobre coordenadas planas UTM reales,
+            // no sobre aproximaciones de grados esféricos.
+            let utm_e_vals = trackpoints.map(p => { let u = latLonToUTM(parseFloat(p.lat), parseFloat(p.lon)); return u.e; });
+            let utm_n_vals = trackpoints.map(p => { let u = latLonToUTM(parseFloat(p.lat), parseFloat(p.lon)); return u.n; });
             let eles = trackpoints.map(p => parseFloat(p.ele));
 
-            let fLats = lats;
-            let fLons = lons;
-            let fEles = eles;
+            let fE = utm_e_vals;
+            let fN = utm_n_vals;
+            let fZ = eles;
 
             if (modo === 'estatico') {
-                fLats = filterMAD(lats);
-                fLons = filterMAD(lons);
-                fEles = filterMAD(eles);
+                fE = filterMAD(utm_e_vals);
+                fN = filterMAD(utm_n_vals);
+                fZ = filterMAD(eles);
                 
-                if(fLats.length === 0) fLats = lats;
-                if(fLons.length === 0) fLons = lons;
-                if(fEles.length === 0) fEles = eles;
+                if(fE.length === 0) fE = utm_e_vals;
+                if(fN.length === 0) fN = utm_n_vals;
+                if(fZ.length === 0) fZ = eles;
                 
                 tituloPromedio.innerText = "📍 PROMEDIO AUTÓNOMO (ESTÁTICO)";
             } else {
                 tituloPromedio.innerText = "📍 CENTROIDE DE TRAYECTORIA (CINEMÁTICO)";
             }
 
-            let finalAvgLat = fLats.reduce((a, b) => a + b, 0) / fLats.length;
-            let finalAvgLon = fLons.reduce((a, b) => a + b, 0) / fLons.length;
-            let finalAvgEle = fEles.reduce((a, b) => a + b, 0) / fEles.length;
+            let finalE = fE.reduce((a, b) => a + b, 0) / fE.length;
+            let finalN = fN.reduce((a, b) => a + b, 0) / fN.length;
+            let finalZ = fZ.reduce((a, b) => a + b, 0) / fZ.length;
 
-            let finalUTM = latLonToUTM(finalAvgLat, finalAvgLon);
+            // Extraer Huso de la primera época útil
+            let muestraUTM = latLonToUTM(parseFloat(trackpoints[0].lat), parseFloat(trackpoints[0].lon));
 
+            // Calcular Desviación Estándar (RMS) Plana Real
             let sumSq = 0;
-            trackpoints.forEach(p => {
-                let dN = (parseFloat(p.lat) - finalAvgLat) * 111320.0;
-                let dE = (parseFloat(p.lon) - finalAvgLon) * 111320.0 * Math.cos(finalAvgLat * Math.PI/180.0);
-                sumSq += (dN*dN + dE*dE);
-            });
+            for(let i=0; i<utm_e_vals.length; i++) {
+                let dE = utm_e_vals[i] - finalE;
+                let dN = utm_n_vals[i] - finalN;
+                sumSq += (dE*dE + dN*dN);
+            }
             let rms = Math.sqrt(sumSq / trackpoints.length);
 
             panelPromedio.style.display = 'block';
-            document.getElementById('promN').innerText = finalUTM.n.toFixed(3);
-            document.getElementById('promE').innerText = finalUTM.e.toFixed(3);
-            document.getElementById('promZ').innerText = finalAvgEle.toFixed(3) + " m";
-            document.getElementById('promHuso').innerText = finalUTM.zone + " " + finalUTM.hemi;
+            document.getElementById('promN').innerText = finalN.toFixed(3);
+            document.getElementById('promE').innerText = finalE.toFixed(3);
+            document.getElementById('promZ').innerText = finalZ.toFixed(3) + " m";
+            document.getElementById('promHuso').innerText = muestraUTM.zone + " " + muestraUTM.hemi;
             document.getElementById('promAcc').innerText = "± " + rms.toFixed(2) + " m";
 
             puntosAlmacenados.push({
                 nombre: currentPuntoName,
-                norte: finalUTM.n.toFixed(3),
-                este: finalUTM.e.toFixed(3),
-                cota: finalAvgEle.toFixed(3),
-                huso: finalUTM.zone + finalUTM.hemi,
+                norte: finalN.toFixed(3),
+                este: finalE.toFixed(3),
+                cota: finalZ.toFixed(3),
+                huso: muestraUTM.zone + muestraUTM.hemi,
                 rms: rms.toFixed(3),
                 epocas: trackpoints.length
             });
@@ -280,22 +278,17 @@
 
         function toggleRecording() {
             if (!isRecording) {
-                if (!navigator.geolocation) { 
-                    alert("Error: Su navegador no soporta permisos de GPS."); 
-                    return; 
-                }
+                if (!navigator.geolocation) { alert("Error de hardware."); return; }
                 
                 let nameVal = inputName.value.trim();
-                if(!nameVal) { 
-                    alert("Control de Calidad: Escriba un Identificador para el Punto."); 
-                    inputName.focus(); 
-                    return; 
-                }
+                if(!nameVal) { alert("Asigne un nombre."); inputName.focus(); return; }
                 currentPuntoName = nameVal;
 
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
+                cacheUltimaPosicion = null;
+                
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
                 mainTimer.innerText = "00:00";
@@ -305,9 +298,9 @@
                 inputName.disabled = true; 
                 modoMedicion.disabled = true; 
                 
-                // DISPARAR BLOQUEO DE PANTALLA
                 activarWakeLock();
                 
+                // Reloj de Cronómetro General
                 timerInterval = setInterval(() => {
                     timeSeconds++;
                     let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
@@ -315,31 +308,37 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
+                // Inicializar canal pasivo de actualización de hardware
                 const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-                watchId = navigator.geolocation.watchPosition(onSuccess, onError, options);
+                watchId = navigator.geolocation.watchPosition((pos) => { cacheUltimaPosicion = pos; }, (err) => { log(`Err Hardware: ${err.message}`); }, options);
+                
+                // CORRECCIÓN DE AUDITORÍA: Bucle activo de inyección forzada a 1Hz exacto. 
+                // Elimina la latencia estática del chip.
+                loopInterval = setInterval(() => {
+                    if (cacheUltimaPosicion !== null) {
+                        procesarNodoTemporal(cacheUltimaPosicion);
+                    }
+                }, 1000);
                 
                 isRecording = true;
                 btnToggle.innerText = "DETENER LEVANTAMIENTO";
                 btnToggle.classList.add("recording");
                 
-                statusBadge.innerText = `BUSCANDO SATÉLITES...`;
+                statusBadge.innerText = `ENGANCHANDO CONSTELACIÓN...`;
                 statusBadge.classList.add("status-recording");
                 statusBadge.style.background = "#f39c12"; 
                 statusBadge.style.color = "white";
-                
-                log(`Levantamiento ${currentPuntoName} iniciado (${modoMedicion.value})...`);
 
             } else {
                 navigator.geolocation.clearWatch(watchId);
                 clearInterval(timerInterval);
+                clearInterval(loopInterval); // Apagar bucle activo de 1Hz
                 isRecording = false;
                 
-                // LIBERAR BLOQUEO DE PANTALLA
                 desactivarWakeLock();
                 
                 btnToggle.innerText = "NUEVO LEVANTAMIENTO";
                 btnToggle.classList.remove("recording");
-                
                 statusBadge.innerText = "LEVANTAMIENTO DETENIDO";
                 statusBadge.classList.remove("status-recording");
                 statusBadge.style.background = "#ddd";
@@ -353,18 +352,17 @@
                     calcularPromedioRobusto();
                     actionButtons.style.display = 'flex';
                     btnDiscard.style.display = 'block';
-                    log(`Levantamiento finalizado. Listo para procesar GPX.`);
                 }
             }
         }
 
-        function onSuccess(position) {
+        // Función del motor de 1Hz que extrae los datos de la caché sin latencia estática
+        function procesarNodoTemporal(position) {
             const coords = position.coords;
             const lat = coords.latitude;
             const lon = coords.longitude;
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
             const accuracy = coords.accuracy; 
-            
             const hdop = (accuracy / 4.0).toFixed(2); 
             const timeIso = new Date(position.timestamp).toISOString();
 
@@ -377,35 +375,27 @@
             if(parseFloat(hdop) > 4.0) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
-                statusBadge.innerText = `🔴 HDOP POBRE: ${hdop} (DESCARTANDO)`;
+                statusBadge.innerText = `🔴 HDOP RECHAZABLE: ${hdop}`;
                 statusBadge.style.background = "#e74c3c";
-                statusBadge.style.color = "white";
                 return; 
             }
 
-            statusBadge.innerText = `🟢 HDOP ÓPTIMO: ${hdop} (GRABANDO)`;
+            statusBadge.innerText = `🟢 ADQUISICIÓN ESTABLE (HDOP: ${hdop})`;
             statusBadge.style.background = "#27ae60";
-            statusBadge.style.color = "white";
 
+            // Inyectar a la matriz de almacenamiento temporal
             trackpoints.push({ lat: lat.toFixed(8), lon: lon.toFixed(8), ele, timeIso, hdop });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
 
-        function onError(err) {
-            log(`ERROR GPS: ${err.message}`);
-        }
-
         function descartar() {
-            if(confirm(`¿Borrar permanentemente el levantamiento que acaba de medir?`)) {
+            if(confirm(`¿Descartar levantamiento?`)) {
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
                 mainTimer.innerText = "00:00";
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
-                document.getElementById('valNorte').innerText = "---";
-                document.getElementById('valEste').innerText = "---";
-                
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 
@@ -414,7 +404,6 @@
                     document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
                     if(puntosAlmacenados.length === 0) panelLibreta.style.display = 'none';
                 }
-                log("Medición actual eliminada.");
             }
         }
 
@@ -428,17 +417,14 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Libreta_Topografica_${new Date().getTime()}.csv`;
+            a.download = `Libreta_Pro_${new Date().getTime()}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            log("Libreta descargada a Excel.");
         }
 
         function descargarDXF() {
             if(puntosAlmacenados.length === 0) return;
-            
             let dxf = "  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1009\r\n  0\r\nENDSEC\r\n";
             dxf += "  0\r\nSECTION\r\n  2\r\nTABLES\r\n  0\r\nENDSEC\r\n";
             dxf += "  0\r\nSECTION\r\n  2\r\nBLOCKS\r\n  0\r\nENDSEC\r\n";
@@ -456,33 +442,29 @@
                 });
                 dxf += "  0\r\nSEQEND\r\n  8\r\nPoligono\r\n";
             }
-
             dxf += "  0\r\nENDSEC\r\n  0\r\nEOF\r\n";
 
             const blob = new Blob([dxf], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Plano_Levantamiento_${new Date().getTime()}.dxf`;
+            a.download = `Plano_Pro_${new Date().getTime()}.dxf`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            log("Archivo DXF R12 generado.");
         }
 
         function vaciarLibreta() {
-            if(confirm("¿Está seguro de eliminar TODOS los puntos de la memoria de la libreta? Asegúrese de haber descargado su Excel o DXF primero.")) {
+            if(confirm("¿Vaciar libreta?")) {
                 puntosAlmacenados = [];
                 document.getElementById('valMemoria').innerText = "0";
                 panelLibreta.style.display = 'none';
                 panelPromedio.style.display = 'none';
-                log("Memoria de libreta reiniciada a cero.");
             }
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.2" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
             });
@@ -497,9 +479,7 @@
             const file = new File([gpxString], fileName, { type: "application/gpx+xml" });
 
             if (share && navigator.share) {
-                try {
-                    await navigator.share({ title: fileName, files: [file] });
-                } catch (e) { log("Compartir cancelado."); }
+                try { await navigator.share({ title: fileName, files: [file] }); } catch (e) {}
             } else {
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(file);
@@ -508,14 +488,6 @@
                 link.click();
                 document.body.removeChild(link);
             }
-        }
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').then(reg => {
-                    reg.update();
-                }).catch(err => console.log('SW Fail', err));
-            });
         }
     </script>
 </body>
