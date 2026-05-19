@@ -120,7 +120,7 @@
 
     <script>
         let watchId = null;
-        let loopInterval = null; // CORRECCIÓN AUDITORÍA: Bucle activo de interrogación a 1Hz
+        let loopInterval = null; 
         let isRecording = false;
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
@@ -130,8 +130,8 @@
         let rejectedCount = 0;
         let wakeLock = null;
         
-        // Memoria caché del último punto vivo entregado por el hardware
         let cacheUltimaPosicion = null;
+        let lastProcessedTimestamp = 0; // NUEVO: Control de épocas duplicadas
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -145,6 +145,19 @@
         const panelLibreta = document.getElementById('panelLibreta');
         const tituloPromedio = document.getElementById('tituloPromedio');
 
+        // NUEVO: Registro del Service Worker para funcionamiento Offline
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                .then(registration => {
+                    log('ServiceWorker registrado con éxito.');
+                })
+                .catch(error => {
+                    log('Error en registro de ServiceWorker: ' + error);
+                });
+            });
+        }
+
         function log(msg) {
             logPanel.innerHTML += `\n> ${msg}`;
             logPanel.scrollTop = logPanel.scrollHeight;
@@ -154,14 +167,14 @@
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    log("WakeLock Activo: Pantalla fijada contra suspensiones.");
+                    log("WakeLock Activo.");
                     document.addEventListener('visibilitychange', async () => {
                         if (wakeLock !== null && document.visibilityState === 'visible') {
                             wakeLock = await navigator.wakeLock.request('screen');
                         }
                     });
                 }
-            } catch (err) { console.log("WakeLock falló pasivamente."); }
+            } catch (err) { console.log("WakeLock falló."); }
         }
 
         function desactivarWakeLock() {
@@ -200,7 +213,6 @@
             return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2.0;
         }
 
-        // Filtro MAD Estático
         function filterMAD(values) {
             if (values.length === 0) return [];
             const median = getMedian(values);
@@ -214,9 +226,6 @@
             if (trackpoints.length === 0) return;
 
             let modo = modoMedicion.value;
-            
-            // CORRECCIÓN AUDITORÍA: El cálculo del promedio se ejecuta sobre coordenadas planas UTM reales,
-            // no sobre aproximaciones de grados esféricos.
             let utm_e_vals = trackpoints.map(p => { let u = latLonToUTM(parseFloat(p.lat), parseFloat(p.lon)); return u.e; });
             let utm_n_vals = trackpoints.map(p => { let u = latLonToUTM(parseFloat(p.lat), parseFloat(p.lon)); return u.n; });
             let eles = trackpoints.map(p => parseFloat(p.ele));
@@ -243,10 +252,8 @@
             let finalN = fN.reduce((a, b) => a + b, 0) / fN.length;
             let finalZ = fZ.reduce((a, b) => a + b, 0) / fZ.length;
 
-            // Extraer Huso de la primera época útil
             let muestraUTM = latLonToUTM(parseFloat(trackpoints[0].lat), parseFloat(trackpoints[0].lon));
 
-            // Calcular Desviación Estándar (RMS) Plana Real
             let sumSq = 0;
             for(let i=0; i<utm_e_vals.length; i++) {
                 let dE = utm_e_vals[i] - finalE;
@@ -288,6 +295,7 @@
                 timeSeconds = 0;
                 rejectedCount = 0;
                 cacheUltimaPosicion = null;
+                lastProcessedTimestamp = 0;
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
@@ -300,7 +308,6 @@
                 
                 activarWakeLock();
                 
-                // Reloj de Cronómetro General
                 timerInterval = setInterval(() => {
                     timeSeconds++;
                     let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
@@ -308,12 +315,9 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                // Inicializar canal pasivo de actualización de hardware
                 const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
                 watchId = navigator.geolocation.watchPosition((pos) => { cacheUltimaPosicion = pos; }, (err) => { log(`Err Hardware: ${err.message}`); }, options);
                 
-                // CORRECCIÓN DE AUDITORÍA: Bucle activo de inyección forzada a 1Hz exacto. 
-                // Elimina la latencia estática del chip.
                 loopInterval = setInterval(() => {
                     if (cacheUltimaPosicion !== null) {
                         procesarNodoTemporal(cacheUltimaPosicion);
@@ -332,7 +336,7 @@
             } else {
                 navigator.geolocation.clearWatch(watchId);
                 clearInterval(timerInterval);
-                clearInterval(loopInterval); // Apagar bucle activo de 1Hz
+                clearInterval(loopInterval); 
                 isRecording = false;
                 
                 desactivarWakeLock();
@@ -356,8 +360,13 @@
             }
         }
 
-        // Función del motor de 1Hz que extrae los datos de la caché sin latencia estática
         function procesarNodoTemporal(position) {
+            // CORRECCIÓN: Prevenir la inyección de la misma coordenada si el GPS no ha emitido una nueva lectura
+            if (position.timestamp === lastProcessedTimestamp) {
+                return; 
+            }
+            lastProcessedTimestamp = position.timestamp;
+
             const coords = position.coords;
             const lat = coords.latitude;
             const lon = coords.longitude;
@@ -383,7 +392,6 @@
             statusBadge.innerText = `🟢 ADQUISICIÓN ESTABLE (HDOP: ${hdop})`;
             statusBadge.style.background = "#27ae60";
 
-            // Inyectar a la matriz de almacenamiento temporal
             trackpoints.push({ lat: lat.toFixed(8), lon: lon.toFixed(8), ele, timeIso, hdop });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
