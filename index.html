@@ -128,6 +128,7 @@
         let timerInterval = null;
         let timeSeconds = 0;
         let rejectedCount = 0;
+        let wakeLock = null; // Variable de control para el bloqueo de pantalla
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -145,6 +146,37 @@
             logPanel.innerHTML += `\n> ${msg}`;
             logPanel.scrollTop = logPanel.scrollHeight;
         }
+
+        // --- SISTEMA WAKE LOCK PARA FORZAR PANTALLA ENCENDIDA ---
+        async function activarWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    log("WakeLock Activo: Pantalla fijada. No se suspenderá.");
+                    
+                    // Si el usuario cambia de pestaña por error y vuelve, reactiva el bloqueo
+                    document.addEventListener('visibilitychange', async () => {
+                        if (wakeLock !== null && document.visibilityState === 'visible') {
+                            wakeLock = await navigator.wakeLock.request('screen');
+                        }
+                    });
+                } else {
+                    log("Aviso: Su navegador no soporta fijación automática de pantalla.");
+                }
+            } catch (err) {
+                log(`Fallo WakeLock: ${err.message}`);
+            }
+        }
+
+        function desactivarWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => {
+                    wakeLock = null;
+                    log("WakeLock Liberado: Pantalla devuelta al estado normal.");
+                });
+            }
+        }
+        // --------------------------------------------------------
 
         function latLonToUTM(lat, lon) {
             const a = 6378137.0;
@@ -197,7 +229,6 @@
             let fLons = lons;
             let fEles = eles;
 
-            // BIFURCACIÓN: Solo se aplica el filtro MAD destructivo en Modo Estático
             if (modo === 'estatico') {
                 fLats = filterMAD(lats);
                 fLons = filterMAD(lons);
@@ -272,7 +303,10 @@
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
-                modoMedicion.disabled = true; // Bloquea el selector mientras graba
+                modoMedicion.disabled = true; 
+                
+                // DISPARAR BLOQUEO DE PANTALLA
+                activarWakeLock();
                 
                 timerInterval = setInterval(() => {
                     timeSeconds++;
@@ -299,6 +333,9 @@
                 navigator.geolocation.clearWatch(watchId);
                 clearInterval(timerInterval);
                 isRecording = false;
+                
+                // LIBERAR BLOQUEO DE PANTALLA
+                desactivarWakeLock();
                 
                 btnToggle.innerText = "NUEVO LEVANTAMIENTO";
                 btnToggle.classList.remove("recording");
