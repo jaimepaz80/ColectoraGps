@@ -20,7 +20,7 @@
 
         .input-group { text-align: left; margin-bottom: 15px; }
         label { font-weight: bold; font-size: 0.85rem; color: #555; display: block; margin-bottom: 5px; }
-        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+        input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
 
         .main-timer { font-size: 3.5rem; font-weight: bold; color: var(--primary); margin: 10px 0; font-family: monospace; letter-spacing: 2px;}
 
@@ -65,15 +65,23 @@
         </div>
         
         <div class="input-group">
-            <label>Identificador del Punto:</label>
-            <input type="text" id="puntoName" placeholder="Ejemplo: R-1, Base-P1..." autocomplete="off">
+            <label>Identificador del Punto / Trayectoria:</label>
+            <input type="text" id="puntoName" placeholder="Ejemplo: R-1, Canal-Sur..." autocomplete="off">
+        </div>
+
+        <div class="input-group">
+            <label>Modo de Medición:</label>
+            <select id="modoMedicion" style="background-color: #f4f6f7; border-color: #bdc3c7;">
+                <option value="estatico" selected>Estático (Filtro Espacial Activado)</option>
+                <option value="cinematico">Cinemático (Rastreo Libre sin Filtro)</option>
+            </select>
         </div>
 
         <div id="mainTimer" class="main-timer">00:00</div>
         <div id="statusBadge" class="status-badge">ESPERANDO INICIO...</div>
 
         <div id="panelPromedio" class="panel-promedio">
-            <h3>📍 PROMEDIO AUTÓNOMO (UTM)</h3>
+            <h3 id="tituloPromedio">📍 PROMEDIO AUTÓNOMO (UTM)</h3>
             <div class="data-row"><span class="label">Norte (Y):</span> <span id="promN" class="prom-val">---</span></div>
             <div class="data-row"><span class="label">Este (X):</span> <span id="promE" class="prom-val">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="promZ" class="prom-val">---</span></div>
@@ -128,8 +136,10 @@
         const mainTimer = document.getElementById('mainTimer');
         const logPanel = document.getElementById('log');
         const inputName = document.getElementById('puntoName');
+        const modoMedicion = document.getElementById('modoMedicion');
         const panelPromedio = document.getElementById('panelPromedio');
         const panelLibreta = document.getElementById('panelLibreta');
+        const tituloPromedio = document.getElementById('tituloPromedio');
 
         function log(msg) {
             logPanel.innerHTML += `\n> ${msg}`;
@@ -178,17 +188,29 @@
         function calcularPromedioRobusto() {
             if (trackpoints.length === 0) return;
 
+            let modo = modoMedicion.value;
             let lats = trackpoints.map(p => parseFloat(p.lat));
             let lons = trackpoints.map(p => parseFloat(p.lon));
             let eles = trackpoints.map(p => parseFloat(p.ele));
 
-            let fLats = filterMAD(lats);
-            let fLons = filterMAD(lons);
-            let fEles = filterMAD(eles);
+            let fLats = lats;
+            let fLons = lons;
+            let fEles = eles;
 
-            if(fLats.length === 0) fLats = lats;
-            if(fLons.length === 0) fLons = lons;
-            if(fEles.length === 0) fEles = eles;
+            // BIFURCACIÓN: Solo se aplica el filtro MAD destructivo en Modo Estático
+            if (modo === 'estatico') {
+                fLats = filterMAD(lats);
+                fLons = filterMAD(lons);
+                fEles = filterMAD(eles);
+                
+                if(fLats.length === 0) fLats = lats;
+                if(fLons.length === 0) fLons = lons;
+                if(fEles.length === 0) fEles = eles;
+                
+                tituloPromedio.innerText = "📍 PROMEDIO AUTÓNOMO (ESTÁTICO)";
+            } else {
+                tituloPromedio.innerText = "📍 CENTROIDE DE TRAYECTORIA (CINEMÁTICO)";
+            }
 
             let finalAvgLat = fLats.reduce((a, b) => a + b, 0) / fLats.length;
             let finalAvgLon = fLons.reduce((a, b) => a + b, 0) / fLons.length;
@@ -250,6 +272,7 @@
                 actionButtons.style.display = 'none';
                 btnDiscard.style.display = 'none';
                 inputName.disabled = true; 
+                modoMedicion.disabled = true; // Bloquea el selector mientras graba
                 
                 timerInterval = setInterval(() => {
                     timeSeconds++;
@@ -270,7 +293,7 @@
                 statusBadge.style.background = "#f39c12"; 
                 statusBadge.style.color = "white";
                 
-                log(`Levantamiento ${currentPuntoName} iniciado...`);
+                log(`Levantamiento ${currentPuntoName} iniciado (${modoMedicion.value})...`);
 
             } else {
                 navigator.geolocation.clearWatch(watchId);
@@ -286,13 +309,14 @@
                 statusBadge.style.color = "#555";
                 
                 inputName.disabled = false;
+                modoMedicion.disabled = false;
                 inputName.value = ''; 
                 
                 if(trackpoints.length > 0) {
                     calcularPromedioRobusto();
                     actionButtons.style.display = 'flex';
                     btnDiscard.style.display = 'block';
-                    log(`Punto finalizado. Calculado y guardado en memoria Libreta.`);
+                    log(`Levantamiento finalizado. Listo para procesar GPX.`);
                 }
             }
         }
@@ -335,7 +359,7 @@
         }
 
         function descartar() {
-            if(confirm(`¿Borrar permanentemente el punto que acaba de medir?`)) {
+            if(confirm(`¿Borrar permanentemente el levantamiento que acaba de medir?`)) {
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
@@ -375,17 +399,12 @@
             log("Libreta descargada a Excel.");
         }
 
-        // MOTOR DXF R12 ESTRICTO
         function descargarDXF() {
             if(puntosAlmacenados.length === 0) return;
             
-            // DXF R12 Puro (AC1009)
             let dxf = "  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1009\r\n  0\r\nENDSEC\r\n";
-            
-            // Secciones fantasma para evitar crash en celulares
             dxf += "  0\r\nSECTION\r\n  2\r\nTABLES\r\n  0\r\nENDSEC\r\n";
             dxf += "  0\r\nSECTION\r\n  2\r\nBLOCKS\r\n  0\r\nENDSEC\r\n";
-            
             dxf += "  0\r\nSECTION\r\n  2\r\nENTITIES\r\n";
 
             puntosAlmacenados.forEach(pt => {
@@ -412,7 +431,7 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            log("Archivo DXF R12 (Alta Compatibilidad) generado.");
+            log("Archivo DXF R12 generado.");
         }
 
         function vaciarLibreta() {
