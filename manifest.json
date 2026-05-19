@@ -1,7 +1,7 @@
 {
   "name": "ColectoraGps Offline",
   "short_name": "Colectora",
-  "start_url": "/",
+  "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#ecf0f1",
   "theme_color": "#2c3e50",
@@ -13,4 +13,3 @@
     }
   ]
 }
-
