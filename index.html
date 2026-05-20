@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.4</title>
+    <title>ColectoraGps - Topografía GNSS v4.6</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -119,7 +119,7 @@
     </div>
 
     <script>
-        let loopInterval = null; 
+        let watchId = null; 
         let isRecording = false;
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
@@ -129,7 +129,7 @@
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let lastProcessedTimestamp = 0; // Control de época satelital
+        let lastProcessedTimestamp = 0; 
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -294,7 +294,7 @@
                 lastProcessedTimestamp = 0; 
                 
                 document.getElementById('valPts').innerText = "0";
-                document.getElementById('valRechazados').innerText = "0";
+                document.getElementById('valRechazados').innerText = "0"; // Permanecerá en 0
                 mainTimer.innerText = "00:00";
                 
                 actionButtons.style.display = 'none';
@@ -311,19 +311,21 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                // SOLUCIÓN LÍMITE: Relajar caché y timeout para evitar colapso de Android
-                loopInterval = setInterval(() => {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => { procesarNodoTemporal(pos); },
-                        (err) => { 
-                            log(`Hardware Ocupado/Error: ${err.message}`); 
-                            statusBadge.innerText = `⚠️ ESPERANDO HARDWARE...`;
-                            statusBadge.style.background = "#f39c12";
-                        },
-                        // timeout: 5000 y maximumAge: 10000 cede el control a Android para evitar bloqueos
-                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 } 
-                    );
-                }, 2000); 
+                const opcionesGPS = { 
+                    enableHighAccuracy: true, 
+                    timeout: 5000, 
+                    maximumAge: 0 // Garantiza que los datos son en tiempo real
+                };
+
+                watchId = navigator.geolocation.watchPosition(
+                    (pos) => { procesarNodoTemporal(pos); },
+                    (err) => { 
+                        log(`Ajustando hardware: ${err.message}`); 
+                        statusBadge.innerText = `⚠️ ESPERANDO HARDWARE...`;
+                        statusBadge.style.background = "#f39c12";
+                    },
+                    opcionesGPS
+                );
                 
                 isRecording = true;
                 btnToggle.innerText = "DETENER LEVANTAMIENTO";
@@ -336,9 +338,13 @@
 
             } else {
                 clearInterval(timerInterval);
-                clearInterval(loopInterval); 
-                isRecording = false;
                 
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                
+                isRecording = false;
                 desactivarWakeLock();
                 
                 btnToggle.innerText = "NUEVO LEVANTAMIENTO";
@@ -352,7 +358,6 @@
                 modoMedicion.disabled = false;
                 inputName.value = ''; 
                 
-                // CRÍTICO: Aquí es donde aparecen los botones si hay al menos 1 punto válido
                 if(trackpoints.length > 0) {
                     calcularPromedioRobusto();
                     actionButtons.style.display = 'flex';
@@ -384,16 +389,8 @@
             document.getElementById('valEle').innerText = ele;
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
-            // Filtro original intacto: Si el HDOP es peor de 4.0, se rechaza
-            if(parseFloat(hdop) > 4.0) {
-                rejectedCount++;
-                document.getElementById('valRechazados').innerText = rejectedCount;
-                statusBadge.innerText = `🔴 HDOP RECHAZABLE: ${hdop}`;
-                statusBadge.style.background = "#e74c3c";
-                return; 
-            }
-
-            statusBadge.innerText = `🟢 ADQUISICIÓN ESTABLE (HDOP: ${hdop})`;
+            // SE ELIMINÓ LA CONDICIÓN DE RECHAZO: El 100% de los puntos pasan al servidor GpsJ
+            statusBadge.innerText = `🟢 GRABANDO (HDOP: ${hdop})`;
             statusBadge.style.background = "#27ae60";
 
             trackpoints.push({ lat: lat.toFixed(8), lon: lon.toFixed(8), ele, timeIso, hdop });
@@ -476,7 +473,7 @@
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.4" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.6" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
             });
