@@ -119,7 +119,6 @@
     </div>
 
     <script>
-        let watchId = null;
         let loopInterval = null; 
         let isRecording = false;
         let trackpoints = [];
@@ -130,8 +129,7 @@
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let cacheUltimaPosicion = null;
-        let lastProcessedTimestamp = 0; // NUEVO: Control de épocas duplicadas
+        let lastProcessedTimestamp = 0; // Control estricto de época satelital
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -145,7 +143,6 @@
         const panelLibreta = document.getElementById('panelLibreta');
         const tituloPromedio = document.getElementById('tituloPromedio');
 
-        // NUEVO: Registro del Service Worker para funcionamiento Offline
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
@@ -294,8 +291,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                cacheUltimaPosicion = null;
-                lastProcessedTimestamp = 0;
+                lastProcessedTimestamp = 0; // Reinicio de control de época
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
@@ -315,13 +311,18 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-                watchId = navigator.geolocation.watchPosition((pos) => { cacheUltimaPosicion = pos; }, (err) => { log(`Err Hardware: ${err.message}`); }, options);
-                
+                // HACK DE FUERZA BRUTA: Petición agresiva cada 1 segundo exacto
                 loopInterval = setInterval(() => {
-                    if (cacheUltimaPosicion !== null) {
-                        procesarNodoTemporal(cacheUltimaPosicion);
-                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => { procesarNodoTemporal(pos); },
+                        (err) => { 
+                            log(`Hardware Ocupado/Error: ${err.message}`); 
+                            statusBadge.innerText = `⚠️ FORZANDO LECTURA...`;
+                            statusBadge.style.background = "#f39c12";
+                        },
+                        // maximumAge 0 prohíbe usar coordenadas recicladas de la caché de Android
+                        { enableHighAccuracy: true, timeout: 950, maximumAge: 0 } 
+                    );
                 }, 1000);
                 
                 isRecording = true;
@@ -334,9 +335,8 @@
                 statusBadge.style.color = "white";
 
             } else {
-                navigator.geolocation.clearWatch(watchId);
                 clearInterval(timerInterval);
-                clearInterval(loopInterval); 
+                clearInterval(loopInterval); // Detenemos el bombardeo de peticiones
                 isRecording = false;
                 
                 desactivarWakeLock();
@@ -361,11 +361,14 @@
         }
 
         function procesarNodoTemporal(position) {
-            // CORRECCIÓN: Prevenir la inyección de la misma coordenada si el GPS no ha emitido una nueva lectura
-            if (position.timestamp === lastProcessedTimestamp) {
+            // 1. Capturamos la hora real de la señal satelital (en milisegundos)
+            const satTimestamp = position.timestamp;
+
+            // 2. FILTRO DE ÉPOCA ESTRICTO: Previene duplicados del caché de Android
+            if (satTimestamp <= lastProcessedTimestamp) {
                 return; 
             }
-            lastProcessedTimestamp = position.timestamp;
+            lastProcessedTimestamp = satTimestamp;
 
             const coords = position.coords;
             const lat = coords.latitude;
@@ -373,7 +376,9 @@
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
             const accuracy = coords.accuracy; 
             const hdop = (accuracy / 4.0).toFixed(2); 
-            const timeIso = new Date(position.timestamp).toISOString();
+            
+            // 3. Formateamos la hora real del satélite para el archivo GPX
+            const timeIso = new Date(satTimestamp).toISOString(); 
 
             const utmVivo = latLonToUTM(lat, lon);
             document.getElementById('valNorte').innerText = utmVivo.n.toFixed(3);
