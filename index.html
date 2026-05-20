@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.2</title>
+    <title>ColectoraGps - Topografía GNSS v4.3</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -291,7 +291,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                lastProcessedTimestamp = 0; // Reinicio de control de época
+                lastProcessedTimestamp = 0; // Reinicio de control de época satelital
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
@@ -311,19 +311,20 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                // HACK DE FUERZA BRUTA: Petición agresiva cada 1 segundo exacto
+                // NUEVO PUNTO DE EQUILIBRIO: Bucle cada 2 segundos (2000ms)
                 loopInterval = setInterval(() => {
                     navigator.geolocation.getCurrentPosition(
                         (pos) => { procesarNodoTemporal(pos); },
                         (err) => { 
                             log(`Hardware Ocupado/Error: ${err.message}`); 
-                            statusBadge.innerText = `⚠️ FORZANDO LECTURA...`;
+                            statusBadge.innerText = `⚠️ ESPERANDO HARDWARE...`;
                             statusBadge.style.background = "#f39c12";
                         },
-                        // maximumAge 0 prohíbe usar coordenadas recicladas de la caché de Android
-                        { enableHighAccuracy: true, timeout: 950, maximumAge: 0 } 
+                        // Timeout relajado a 1800ms para dejar que el procesador triangule.
+                        // maximumAge: 0 asegura que nunca use caché (varianza real).
+                        { enableHighAccuracy: true, timeout: 1800, maximumAge: 0 } 
                     );
-                }, 1000);
+                }, 2000); 
                 
                 isRecording = true;
                 btnToggle.innerText = "DETENER LEVANTAMIENTO";
@@ -336,7 +337,7 @@
 
             } else {
                 clearInterval(timerInterval);
-                clearInterval(loopInterval); // Detenemos el bombardeo de peticiones
+                clearInterval(loopInterval); // Detenemos el bucle
                 isRecording = false;
                 
                 desactivarWakeLock();
@@ -477,7 +478,7 @@
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.2" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.3" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
             });
