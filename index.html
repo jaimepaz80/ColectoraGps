@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.3</title>
+    <title>ColectoraGps - Topografía GNSS v4.4</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -129,7 +129,7 @@
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let lastProcessedTimestamp = 0; // Control estricto de época satelital
+        let lastProcessedTimestamp = 0; // Control de época satelital
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -291,7 +291,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                lastProcessedTimestamp = 0; // Reinicio de control de época satelital
+                lastProcessedTimestamp = 0; 
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0";
@@ -311,7 +311,7 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                // NUEVO PUNTO DE EQUILIBRIO: Bucle cada 2 segundos (2000ms)
+                // SOLUCIÓN LÍMITE: Relajar caché y timeout para evitar colapso de Android
                 loopInterval = setInterval(() => {
                     navigator.geolocation.getCurrentPosition(
                         (pos) => { procesarNodoTemporal(pos); },
@@ -320,9 +320,8 @@
                             statusBadge.innerText = `⚠️ ESPERANDO HARDWARE...`;
                             statusBadge.style.background = "#f39c12";
                         },
-                        // Timeout relajado a 1800ms para dejar que el procesador triangule.
-                        // maximumAge: 0 asegura que nunca use caché (varianza real).
-                        { enableHighAccuracy: true, timeout: 1800, maximumAge: 0 } 
+                        // timeout: 5000 y maximumAge: 10000 cede el control a Android para evitar bloqueos
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 } 
                     );
                 }, 2000); 
                 
@@ -337,7 +336,7 @@
 
             } else {
                 clearInterval(timerInterval);
-                clearInterval(loopInterval); // Detenemos el bucle
+                clearInterval(loopInterval); 
                 isRecording = false;
                 
                 desactivarWakeLock();
@@ -353,6 +352,7 @@
                 modoMedicion.disabled = false;
                 inputName.value = ''; 
                 
+                // CRÍTICO: Aquí es donde aparecen los botones si hay al menos 1 punto válido
                 if(trackpoints.length > 0) {
                     calcularPromedioRobusto();
                     actionButtons.style.display = 'flex';
@@ -362,10 +362,8 @@
         }
 
         function procesarNodoTemporal(position) {
-            // 1. Capturamos la hora real de la señal satelital (en milisegundos)
             const satTimestamp = position.timestamp;
 
-            // 2. FILTRO DE ÉPOCA ESTRICTO: Previene duplicados del caché de Android
             if (satTimestamp <= lastProcessedTimestamp) {
                 return; 
             }
@@ -378,7 +376,6 @@
             const accuracy = coords.accuracy; 
             const hdop = (accuracy / 4.0).toFixed(2); 
             
-            // 3. Formateamos la hora real del satélite para el archivo GPX
             const timeIso = new Date(satTimestamp).toISOString(); 
 
             const utmVivo = latLonToUTM(lat, lon);
@@ -387,6 +384,7 @@
             document.getElementById('valEle').innerText = ele;
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
+            // Filtro original intacto: Si el HDOP es peor de 4.0, se rechaza
             if(parseFloat(hdop) > 4.0) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
@@ -478,7 +476,7 @@
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.3" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.4" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
             });
