@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.7</title>
+    <title>ColectoraGps - Topografía GNSS v4.8</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -35,8 +35,6 @@
         .panel-promedio { display: none; background: #e8f8f5; border: 2px solid var(--active); padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.95rem; }
         .panel-promedio h3 { margin: 0 0 10px 0; color: var(--active); font-size: 1.1rem; text-align: center; border-bottom: 1px solid #a3e4d7; padding-bottom: 5px;}
         .prom-val { font-family: monospace; font-weight: bold; color: #117a65; font-size: 1.1rem;}
-        
-        .panel-libreta { display: none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
         
         button { width: 100%; padding: 14px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
         #btnToggle { background: var(--primary); color: white; }
@@ -85,14 +83,14 @@
             <div class="data-row"><span class="label">Este (X):</span> <span id="promE" class="prom-val">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="promZ" class="prom-val">---</span></div>
             <div class="data-row"><span class="label">Huso/Hem:</span> <span id="promHuso" class="prom-val" style="color:#333;">---</span></div>
-            <div class="data-row"><span class="label" style="color:var(--accent);">Dispersión (RMS):</span> <span id="promAcc" class="prom-val" style="color:var(--accent);">---</span></div>
+            <div class="data-row"><span class="label" style="color:var(--accent);">Dispersión 3D (RMS):</span> <span id="promAcc" class="prom-val" style="color:var(--accent);">---</span></div>
         </div>
 
         <div class="data-panel">
             <div class="data-row"><span class="label" style="color:#2980b9;">Norte (Y Vivo):</span> <span id="valNorte" class="value" style="color:#2980b9;">---</span></div>
             <div class="data-row"><span class="label" style="color:#2980b9;">Este (X Vivo):</span> <span id="valEste" class="value" style="color:#2980b9;">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
-            <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
+            <div class="data-row"><span class="label">Precisión GPS (Error H):</span> <span id="valAcc" class="value">---</span></div>
             <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active); font-weight:bold;">0</span></div>
             <div class="data-row"><span class="label" style="color:var(--accent);">Épocas Rechazadas:</span> <span id="valRechazados" class="value" style="color:var(--accent); font-weight:bold;">0</span></div>
         </div>
@@ -105,7 +103,7 @@
         </div>
         <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR MEDICIÓN ACTUAL</button>
 
-        <div id="panelLibreta" class="panelLibreta" style="display:none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px;">
+        <div id="panelLibreta" style="display:none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px;">
             <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
             
             <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -124,12 +122,12 @@
         let currentPuntoName = "Punto_GPS";
         let puntosAlmacenados = [];
         let timerInterval = null;
-        let pollingTimeout = null; // Controla el ciclo activo secuencial
+        let pollingTimeout = null;
         let timeSeconds = 0;
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let ultimaCotaRegistrada = null; // Muro de contención para cotas congeladas
+        let ultimaCotaRegistrada = null; // Guardará el valor numérico (float)
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -177,7 +175,7 @@
 
         function latLonToUTM(lat, lon) {
             const a = 6378137.0;
-            const eccSquared = 0.00669438;
+            const eccSquared = 0.00669437999014; // Constante geodésica WGS84 completa sin truncado prematuro
             const k0 = 0.9996;
             const zone = Math.floor((lon + 180) / 6) + 1;
             const lonOrigin = (zone - 1) * 6 - 180 + 3;
@@ -246,28 +244,31 @@
 
             let muestraUTM = latLonToUTM(parseFloat(trackpoints[0].lat), parseFloat(trackpoints[0].lon));
 
+            // CORRECCIÓN: Cálculo de RMS en 3D (Planimetría + Altimetría)
             let sumSq = 0;
-            for(let i=0; i<utm_e_vals.length; i++) {
+            for(let i=0; i<trackpoints.length; i++) {
                 let dE = utm_e_vals[i] - finalE;
                 let dN = utm_n_vals[i] - finalN;
-                sumSq += (dE*dE + dN*dN);
+                let dZ = eles[i] - finalZ;
+                sumSq += (dE*dE + dN*dN + dZ*dZ);
             }
             let rms = Math.sqrt(sumSq / trackpoints.length);
 
             panelPromedio.style.display = 'block';
-            document.getElementById('promN').innerText = finalN.toFixed(3);
-            document.getElementById('promE').innerText = finalE.toFixed(3);
-            document.getElementById('promZ').innerText = finalZ.toFixed(3) + " m";
+            // CORRECCIÓN: Visualización en pantalla con al menos 4 decimales
+            document.getElementById('promN').innerText = finalN.toFixed(4);
+            document.getElementById('promE').innerText = finalE.toFixed(4);
+            document.getElementById('promZ').innerText = finalZ.toFixed(4) + " m";
             document.getElementById('promHuso').innerText = muestraUTM.zone + " " + muestraUTM.hemi;
-            document.getElementById('promAcc').innerText = "± " + rms.toFixed(2) + " m";
+            document.getElementById('promAcc').innerText = "± " + rms.toFixed(4) + " m";
 
             puntosAlmacenados.push({
                 nombre: currentPuntoName,
-                norte: finalN.toFixed(3),
-                este: finalE.toFixed(3),
-                cota: finalZ.toFixed(3),
+                norte: finalN.toFixed(4),
+                este: finalE.toFixed(4),
+                cota: finalZ.toFixed(4),
                 huso: muestraUTM.zone + muestraUTM.hemi,
-                rms: rms.toFixed(3),
+                rms: rms.toFixed(4),
                 epocas: trackpoints.length
             });
             
@@ -275,27 +276,24 @@
             document.getElementById('panelLibreta').style.display = 'block';
         }
 
-        // --- SISTEMA DE POLLING ACTIVO (CICLO SECUENCIAL) ---
         function solicitarPosicionHardware() {
             if (!isRecording) return;
             
             navigator.geolocation.getCurrentPosition(
                 (pos) => { 
                     procesarNodoTemporal(pos); 
-                    // Esperar 1 segundo exacto antes de volver a martillar el hardware
                     if (isRecording) { pollingTimeout = setTimeout(solicitarPosicionHardware, 1000); }
                 },
                 (err) => { 
                     log(`Cielo bloqueado/Buscando satélites...`); 
                     statusBadge.innerText = `⚠️ ESPERANDO SEÑAL GNSS...`;
                     statusBadge.style.background = "#f39c12";
-                    // Si falla, insistir en 1 segundo
                     if (isRecording) { pollingTimeout = setTimeout(solicitarPosicionHardware, 1000); }
                 },
                 { 
                     enableHighAccuracy: true, 
                     timeout: 5000, 
-                    maximumAge: 0 // DESTRUYE LA CACHÉ DE ANDROID, FUERZA LECTURA EN FRÍO
+                    maximumAge: 0 
                 }
             );
         }
@@ -311,7 +309,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                ultimaCotaRegistrada = null; // Reiniciar filtro
+                ultimaCotaRegistrada = null;
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0"; 
@@ -340,12 +338,11 @@
                 statusBadge.style.background = "#f39c12"; 
                 statusBadge.style.color = "white";
 
-                // INICIAR CICLO DE INTERROGACIÓN AL HARDWARE
                 solicitarPosicionHardware();
 
             } else {
                 clearInterval(timerInterval);
-                clearTimeout(pollingTimeout); // Detener el ciclo de polling
+                clearTimeout(pollingTimeout);
                 
                 isRecording = false;
                 desactivarWakeLock();
@@ -373,39 +370,41 @@
             const coords = position.coords;
             const lat = coords.latitude;
             const lon = coords.longitude;
-            const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
+            
+            // CORRECCIÓN: Captura de cota con máxima precisión (float numérico nativo)
+            const ele = coords.altitude !== null ? coords.altitude : 0.0;
             const accuracy = coords.accuracy; 
-            const hdop = (accuracy / 4.0).toFixed(2); 
             const timeIso = new Date(position.timestamp).toISOString(); 
 
-            // Actualizar vista planimétrica siempre
+            // Actualizar vista planimétrica en tiempo real
             const utmVivo = latLonToUTM(lat, lon);
-            document.getElementById('valNorte').innerText = utmVivo.n.toFixed(3);
-            document.getElementById('valEste').innerText = utmVivo.e.toFixed(3);
-            document.getElementById('valEle').innerText = ele + " m";
-            document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
+            
+            // CORRECCIÓN: Renderizado en pantalla con 4 decimales
+            document.getElementById('valNorte').innerText = utmVivo.n.toFixed(4);
+            document.getElementById('valEste').innerText = utmVivo.e.toFixed(4);
+            document.getElementById('valEle').innerText = ele.toFixed(4) + " m";
+            document.getElementById('valAcc').innerText = `±${accuracy.toFixed(2)}m`;
 
-            // --- MURO DE CONTENCIÓN GEOMÉTRICO ---
-            if (ultimaCotaRegistrada !== null && ele === ultimaCotaRegistrada) {
-                // Cota reciclada (Fix 2D). Rechazar punto.
+            // CORRECCIÓN: Muro de contención adaptado a números. 
+            // Si el hardware repite exactamente el flotante (congelado por fix 2D de Android), se rechaza.
+            if (ultimaCotaRegistrada !== null && Math.abs(ele - ultimaCotaRegistrada) < 0.000001) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
                 
                 statusBadge.innerText = `⛔ DESCARTANDO (COTA CONGELADA)`;
                 statusBadge.style.background = "#e74c3c";
                 document.getElementById('valEle').style.color = "#e74c3c";
-                return; // Cortar ejecución, no se añade a trackpoints
+                return;
             }
             
-            // --- COTA VÁLIDA (NUEVA MEDICIÓN 3D) ---
             ultimaCotaRegistrada = ele;
             
-            statusBadge.innerText = `🟢 GRABANDO (HDOP: ${hdop})`;
+            statusBadge.innerText = `🟢 GRABANDO (Precisión: ±${accuracy.toFixed(1)}m)`;
             statusBadge.style.background = "#27ae60";
             document.getElementById('valEle').style.color = "#2c3e50";
 
-            // Se almacena a 10 decimales evitando truncamiento de redondos
-            trackpoints.push({ lat: lat.toFixed(10), lon: lon.toFixed(10), ele, timeIso, hdop });
+            // Se almacena la información pura sin truncamiento previo
+            trackpoints.push({ lat: lat.toFixed(10), lon: lon.toFixed(10), ele: ele, timeIso, accuracy });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
 
@@ -430,7 +429,7 @@
 
         function descargarExcel() {
             if(puntosAlmacenados.length === 0) return;
-            let csvData = "Identificador,Norte (Y),Este (X),Cota (Z),Huso,Precision_RMS(m),Epocas_Grabadas\n";
+            let csvData = "Identificador,Norte (Y),Este (X),Cota (Z),Huso,Precision_3D_RMS(m),Epocas_Grabadas\n";
             puntosAlmacenados.forEach(pt => {
                 csvData += `${pt.nombre},${pt.norte},${pt.este},${pt.cota},${pt.huso},${pt.rms},${pt.epocas}\n`;
             });
@@ -453,7 +452,7 @@
 
             puntosAlmacenados.forEach(pt => {
                 dxf += "  0\r\nPOINT\r\n  8\r\nPuntos\r\n 10\r\n" + pt.este + "\r\n 20\r\n" + pt.norte + "\r\n 30\r\n" + pt.cota + "\r\n";
-                dxf += "  0\r\nTEXT\r\n  8\r\nEtiquetas\r\n 10\r\n" + (parseFloat(pt.este) + 0.5).toFixed(3) + "\r\n 20\r\n" + (parseFloat(pt.norte) + 0.5).toFixed(3) + "\r\n 30\r\n" + pt.cota + "\r\n 40\r\n1.0\r\n  1\r\n" + pt.nombre + "\r\n";
+                dxf += "  0\r\nTEXT\r\n  8\r\nEtiquetas\r\n 10\r\n" + (parseFloat(pt.este) + 0.5).toFixed(4) + "\r\n 20\r\n" + (parseFloat(pt.norte) + 0.5).toFixed(4) + "\r\n 30\r\n" + pt.cota + "\r\n 40\r\n1.0\r\n  1\r\n" + pt.nombre + "\r\n";
             });
 
             if(puntosAlmacenados.length > 1) {
@@ -485,9 +484,9 @@
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.7" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.8" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
-                gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
+                gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${parseFloat(pt.ele).toFixed(4)}</ele><time>${pt.timeIso}</time><accuracy>${pt.accuracy.toFixed(2)}</accuracy>\n  </trkpt>\n`;
             });
             gpx += `</trkseg></trk>\n</gpx>`;
             return gpx;
