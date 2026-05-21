@@ -89,8 +89,8 @@
         </div>
 
         <div class="data-panel">
-            <div class="data-row"><span class="label" style="color:#2980b9;">Norte (Y) Vivo:</span> <span id="valNorte" class="value" style="color:#2980b9;">---</span></div>
-            <div class="data-row"><span class="label" style="color:#2980b9;">Este (X) Vivo:</span> <span id="valEste" class="value" style="color:#2980b9;">---</span></div>
+            <div class="data-row"><span class="label" style="color:#2980b9;">Norte (Y Vivo):</span> <span id="valNorte" class="value" style="color:#2980b9;">---</span></div>
+            <div class="data-row"><span class="label" style="color:#2980b9;">Este (X Vivo):</span> <span id="valEste" class="value" style="color:#2980b9;">---</span></div>
             <div class="data-row"><span class="label">Cota (Z):</span> <span id="valEle" class="value">--- m</span></div>
             <div class="data-row"><span class="label">Precisión HDOP:</span> <span id="valAcc" class="value">---</span></div>
             <div class="data-row"><span class="label">Épocas Grabadas:</span> <span id="valPts" class="value" style="color:var(--active); font-weight:bold;">0</span></div>
@@ -294,7 +294,7 @@
                 lastProcessedTimestamp = 0; 
                 
                 document.getElementById('valPts').innerText = "0";
-                document.getElementById('valRechazados').innerText = "0"; // Permanecerá en 0
+                document.getElementById('valRechazados').innerText = "0"; 
                 mainTimer.innerText = "00:00";
                 
                 actionButtons.style.display = 'none';
@@ -314,7 +314,7 @@
                 const opcionesGPS = { 
                     enableHighAccuracy: true, 
                     timeout: 5000, 
-                    maximumAge: 0 // Garantiza que los datos son en tiempo real
+                    maximumAge: 0 
                 };
 
                 watchId = navigator.geolocation.watchPosition(
@@ -389,11 +389,11 @@
             document.getElementById('valEle').innerText = ele;
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
-            // SE ELIMINÓ LA CONDICIÓN DE RECHAZO: El 100% de los puntos pasan al servidor GpsJ
             statusBadge.innerText = `🟢 GRABANDO (HDOP: ${hdop})`;
             statusBadge.style.background = "#27ae60";
 
-            trackpoints.push({ lat: lat.toFixed(8), lon: lon.toFixed(8), ele, timeIso, hdop });
+            // CORRECCIÓN DE RESOLUCIÓN APLICADA AQUÍ (10 decimales)
+            trackpoints.push({ lat: lat.toFixed(10), lon: lon.toFixed(10), ele, timeIso, hdop });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
 
