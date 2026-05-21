@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.8</title>
+    <title>ColectoraGps - Topografía GNSS v4.10</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -127,7 +127,7 @@
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let ultimaCotaRegistrada = null; // Guardará el valor numérico (float)
+        let ultimaCotaRegistrada = null; 
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -175,7 +175,7 @@
 
         function latLonToUTM(lat, lon) {
             const a = 6378137.0;
-            const eccSquared = 0.00669437999014; // Constante geodésica WGS84 completa sin truncado prematuro
+            const eccSquared = 0.00669437999014; 
             const k0 = 0.9996;
             const zone = Math.floor((lon + 180) / 6) + 1;
             const lonOrigin = (zone - 1) * 6 - 180 + 3;
@@ -244,7 +244,6 @@
 
             let muestraUTM = latLonToUTM(parseFloat(trackpoints[0].lat), parseFloat(trackpoints[0].lon));
 
-            // CORRECCIÓN: Cálculo de RMS en 3D (Planimetría + Altimetría)
             let sumSq = 0;
             for(let i=0; i<trackpoints.length; i++) {
                 let dE = utm_e_vals[i] - finalE;
@@ -255,7 +254,6 @@
             let rms = Math.sqrt(sumSq / trackpoints.length);
 
             panelPromedio.style.display = 'block';
-            // CORRECCIÓN: Visualización en pantalla con al menos 4 decimales
             document.getElementById('promN').innerText = finalN.toFixed(4);
             document.getElementById('promE').innerText = finalE.toFixed(4);
             document.getElementById('promZ').innerText = finalZ.toFixed(4) + " m";
@@ -371,39 +369,51 @@
             const lat = coords.latitude;
             const lon = coords.longitude;
             
-            // CORRECCIÓN: Captura de cota con máxima precisión (float numérico nativo)
+            // Extracción nativa de la cota
             const ele = coords.altitude !== null ? coords.altitude : 0.0;
             const accuracy = coords.accuracy; 
             const timeIso = new Date(position.timestamp).toISOString(); 
 
-            // Actualizar vista planimétrica en tiempo real
+            // Actualizar vista planimétrica
             const utmVivo = latLonToUTM(lat, lon);
-            
-            // CORRECCIÓN: Renderizado en pantalla con 4 decimales
             document.getElementById('valNorte').innerText = utmVivo.n.toFixed(4);
             document.getElementById('valEste').innerText = utmVivo.e.toFixed(4);
-            document.getElementById('valEle').innerText = ele.toFixed(4) + " m";
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(2)}m`;
 
-            // CORRECCIÓN: Muro de contención adaptado a números. 
-            // Si el hardware repite exactamente el flotante (congelado por fix 2D de Android), se rechaza.
+            let cotaElement = document.getElementById('valEle');
+
+            // --- FILTRO DE CALIDAD ESTRICTO (RECHAZO DE COTA FALSA/CELULAR) ---
+            if (ele % 1 === 0 || ele === 0.0) {
+                cotaElement.innerText = `~ ${ele} m (Rechazada)`;
+                cotaElement.style.color = "#e74c3c"; // Rojo indicando rechazo
+                
+                rejectedCount++;
+                document.getElementById('valRechazados').innerText = rejectedCount;
+                
+                statusBadge.innerText = `⛔ DESCARTANDO (SIN FIX 3D / COTA FALSA)`;
+                statusBadge.style.background = "#e74c3c";
+                return; // Corta la ejecución, no se añade a trackpoints
+            } else {
+                // El hardware está arrojando flotantes reales con decimales lógicos
+                cotaElement.innerText = ele.toFixed(4) + " m";
+                cotaElement.style.color = "#2c3e50"; 
+            }
+
+            // --- FILTRO DE HARDWARE TRABADO (COTA REPETIDA) ---
             if (ultimaCotaRegistrada !== null && Math.abs(ele - ultimaCotaRegistrada) < 0.000001) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
                 
                 statusBadge.innerText = `⛔ DESCARTANDO (COTA CONGELADA)`;
                 statusBadge.style.background = "#e74c3c";
-                document.getElementById('valEle').style.color = "#e74c3c";
-                return;
+                return; // Corta la ejecución
             }
             
             ultimaCotaRegistrada = ele;
             
             statusBadge.innerText = `🟢 GRABANDO (Precisión: ±${accuracy.toFixed(1)}m)`;
             statusBadge.style.background = "#27ae60";
-            document.getElementById('valEle').style.color = "#2c3e50";
 
-            // Se almacena la información pura sin truncamiento previo
             trackpoints.push({ lat: lat.toFixed(10), lon: lon.toFixed(10), ele: ele, timeIso, accuracy });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
@@ -484,7 +494,7 @@
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.8" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.10" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${parseFloat(pt.ele).toFixed(4)}</ele><time>${pt.timeIso}</time><accuracy>${pt.accuracy.toFixed(2)}</accuracy>\n  </trkpt>\n`;
             });
