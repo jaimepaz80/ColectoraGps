@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ColectoraGps - Topografía GNSS v4.6</title>
+    <title>ColectoraGps - Topografía GNSS v4.7</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     
@@ -105,7 +105,7 @@
         </div>
         <button id="btnDiscard" onclick="descartar()">🗑️ DESCARTAR MEDICIÓN ACTUAL</button>
 
-        <div id="panelLibreta" class="panel-libreta">
+        <div id="panelLibreta" class="panelLibreta" style="display:none; background: #ebf5fb; border: 2px solid #3498db; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px;">
             <div class="data-row"><span class="label" style="color:#2980b9;">Puntos en Libreta:</span> <span id="valMemoria" class="value" style="font-weight:bold;">0</span></div>
             
             <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -119,17 +119,17 @@
     </div>
 
     <script>
-        let watchId = null; 
         let isRecording = false;
         let trackpoints = [];
         let currentPuntoName = "Punto_GPS";
         let puntosAlmacenados = [];
         let timerInterval = null;
+        let pollingTimeout = null; // Controla el ciclo activo secuencial
         let timeSeconds = 0;
         let rejectedCount = 0;
         let wakeLock = null;
         
-        let lastProcessedTimestamp = 0; 
+        let ultimaCotaRegistrada = null; // Muro de contención para cotas congeladas
 
         const btnToggle = document.getElementById('btnToggle');
         const actionButtons = document.getElementById('actionButtons');
@@ -146,12 +146,8 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    log('ServiceWorker registrado con éxito.');
-                })
-                .catch(error => {
-                    log('Error en registro de ServiceWorker: ' + error);
-                });
+                .then(registration => { log('ServiceWorker registrado con éxito.'); })
+                .catch(error => { log('Error en registro de ServiceWorker: ' + error); });
             });
         }
 
@@ -164,7 +160,6 @@
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    log("WakeLock Activo.");
                     document.addEventListener('visibilitychange', async () => {
                         if (wakeLock !== null && document.visibilityState === 'visible') {
                             wakeLock = await navigator.wakeLock.request('screen');
@@ -277,7 +272,32 @@
             });
             
             document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
-            panelLibreta.style.display = 'block';
+            document.getElementById('panelLibreta').style.display = 'block';
+        }
+
+        // --- SISTEMA DE POLLING ACTIVO (CICLO SECUENCIAL) ---
+        function solicitarPosicionHardware() {
+            if (!isRecording) return;
+            
+            navigator.geolocation.getCurrentPosition(
+                (pos) => { 
+                    procesarNodoTemporal(pos); 
+                    // Esperar 1 segundo exacto antes de volver a martillar el hardware
+                    if (isRecording) { pollingTimeout = setTimeout(solicitarPosicionHardware, 1000); }
+                },
+                (err) => { 
+                    log(`Cielo bloqueado/Buscando satélites...`); 
+                    statusBadge.innerText = `⚠️ ESPERANDO SEÑAL GNSS...`;
+                    statusBadge.style.background = "#f39c12";
+                    // Si falla, insistir en 1 segundo
+                    if (isRecording) { pollingTimeout = setTimeout(solicitarPosicionHardware, 1000); }
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    timeout: 5000, 
+                    maximumAge: 0 // DESTRUYE LA CACHÉ DE ANDROID, FUERZA LECTURA EN FRÍO
+                }
+            );
         }
 
         function toggleRecording() {
@@ -291,7 +311,7 @@
                 trackpoints = [];
                 timeSeconds = 0;
                 rejectedCount = 0;
-                lastProcessedTimestamp = 0; 
+                ultimaCotaRegistrada = null; // Reiniciar filtro
                 
                 document.getElementById('valPts').innerText = "0";
                 document.getElementById('valRechazados').innerText = "0"; 
@@ -311,22 +331,6 @@
                     mainTimer.innerText = `${m}:${s}`;
                 }, 1000);
                 
-                const opcionesGPS = { 
-                    enableHighAccuracy: true, 
-                    timeout: 5000, 
-                    maximumAge: 0 
-                };
-
-                watchId = navigator.geolocation.watchPosition(
-                    (pos) => { procesarNodoTemporal(pos); },
-                    (err) => { 
-                        log(`Ajustando hardware: ${err.message}`); 
-                        statusBadge.innerText = `⚠️ ESPERANDO HARDWARE...`;
-                        statusBadge.style.background = "#f39c12";
-                    },
-                    opcionesGPS
-                );
-                
                 isRecording = true;
                 btnToggle.innerText = "DETENER LEVANTAMIENTO";
                 btnToggle.classList.add("recording");
@@ -336,13 +340,12 @@
                 statusBadge.style.background = "#f39c12"; 
                 statusBadge.style.color = "white";
 
+                // INICIAR CICLO DE INTERROGACIÓN AL HARDWARE
+                solicitarPosicionHardware();
+
             } else {
                 clearInterval(timerInterval);
-                
-                if (watchId !== null) {
-                    navigator.geolocation.clearWatch(watchId);
-                    watchId = null;
-                }
+                clearTimeout(pollingTimeout); // Detener el ciclo de polling
                 
                 isRecording = false;
                 desactivarWakeLock();
@@ -367,32 +370,41 @@
         }
 
         function procesarNodoTemporal(position) {
-            const satTimestamp = position.timestamp;
-
-            if (satTimestamp <= lastProcessedTimestamp) {
-                return; 
-            }
-            lastProcessedTimestamp = satTimestamp;
-
             const coords = position.coords;
             const lat = coords.latitude;
             const lon = coords.longitude;
             const ele = coords.altitude ? coords.altitude.toFixed(3) : "0.000";
             const accuracy = coords.accuracy; 
             const hdop = (accuracy / 4.0).toFixed(2); 
-            
-            const timeIso = new Date(satTimestamp).toISOString(); 
+            const timeIso = new Date(position.timestamp).toISOString(); 
 
+            // Actualizar vista planimétrica siempre
             const utmVivo = latLonToUTM(lat, lon);
             document.getElementById('valNorte').innerText = utmVivo.n.toFixed(3);
             document.getElementById('valEste').innerText = utmVivo.e.toFixed(3);
-            document.getElementById('valEle').innerText = ele;
+            document.getElementById('valEle').innerText = ele + " m";
             document.getElementById('valAcc').innerText = `±${accuracy.toFixed(1)}m (HDOP: ${hdop})`;
 
+            // --- MURO DE CONTENCIÓN GEOMÉTRICO ---
+            if (ultimaCotaRegistrada !== null && ele === ultimaCotaRegistrada) {
+                // Cota reciclada (Fix 2D). Rechazar punto.
+                rejectedCount++;
+                document.getElementById('valRechazados').innerText = rejectedCount;
+                
+                statusBadge.innerText = `⛔ DESCARTANDO (COTA CONGELADA)`;
+                statusBadge.style.background = "#e74c3c";
+                document.getElementById('valEle').style.color = "#e74c3c";
+                return; // Cortar ejecución, no se añade a trackpoints
+            }
+            
+            // --- COTA VÁLIDA (NUEVA MEDICIÓN 3D) ---
+            ultimaCotaRegistrada = ele;
+            
             statusBadge.innerText = `🟢 GRABANDO (HDOP: ${hdop})`;
             statusBadge.style.background = "#27ae60";
+            document.getElementById('valEle').style.color = "#2c3e50";
 
-            // CORRECCIÓN DE RESOLUCIÓN APLICADA AQUÍ (10 decimales)
+            // Se almacena a 10 decimales evitando truncamiento de redondos
             trackpoints.push({ lat: lat.toFixed(10), lon: lon.toFixed(10), ele, timeIso, hdop });
             document.getElementById('valPts').innerText = trackpoints.length;
         }
@@ -411,7 +423,7 @@
                 if(puntosAlmacenados.length > 0) {
                     puntosAlmacenados.pop();
                     document.getElementById('valMemoria').innerText = puntosAlmacenados.length;
-                    if(puntosAlmacenados.length === 0) panelLibreta.style.display = 'none';
+                    if(puntosAlmacenados.length === 0) document.getElementById('panelLibreta').style.display = 'none';
                 }
             }
         }
@@ -467,13 +479,13 @@
             if(confirm("¿Vaciar libreta?")) {
                 puntosAlmacenados = [];
                 document.getElementById('valMemoria').innerText = "0";
-                panelLibreta.style.display = 'none';
+                document.getElementById('panelLibreta').style.display = 'none';
                 panelPromedio.style.display = 'none';
             }
         }
 
         function generarGPXString() {
-            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.6" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
+            let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.7" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
                 gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele}</ele><time>${pt.timeIso}</time><hdop>${pt.hdop}</hdop>\n  </trkpt>\n`;
             });
