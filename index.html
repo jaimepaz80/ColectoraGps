@@ -256,7 +256,7 @@
             panelPromedio.style.display = 'block';
             document.getElementById('promN').innerText = finalN.toFixed(4);
             document.getElementById('promE').innerText = finalE.toFixed(4);
-            document.getElementById('promZ').innerText = finalZ.toFixed(4) + " m";
+            document.getElementById('promZ').innerText = finalZ.toString() + " m";
             document.getElementById('promHuso').innerText = muestraUTM.zone + " " + muestraUTM.hemi;
             document.getElementById('promAcc').innerText = "± " + rms.toFixed(4) + " m";
 
@@ -264,7 +264,7 @@
                 nombre: currentPuntoName,
                 norte: finalN.toFixed(4),
                 este: finalE.toFixed(4),
-                cota: finalZ.toFixed(4),
+                cota: finalZ.toString(),
                 huso: muestraUTM.zone + muestraUTM.hemi,
                 rms: rms.toFixed(4),
                 epocas: trackpoints.length
@@ -369,12 +369,10 @@
             const lat = coords.latitude;
             const lon = coords.longitude;
             
-            // Extracción nativa de la cota
             const ele = coords.altitude !== null ? coords.altitude : 0.0;
             const accuracy = coords.accuracy; 
             const timeIso = new Date(position.timestamp).toISOString(); 
 
-            // Actualizar vista planimétrica
             const utmVivo = latLonToUTM(lat, lon);
             document.getElementById('valNorte').innerText = utmVivo.n.toFixed(4);
             document.getElementById('valEste').innerText = utmVivo.e.toFixed(4);
@@ -382,31 +380,28 @@
 
             let cotaElement = document.getElementById('valEle');
 
-            // --- FILTRO DE CALIDAD ESTRICTO (RECHAZO DE COTA FALSA/CELULAR) ---
             if (ele % 1 === 0 || ele === 0.0) {
                 cotaElement.innerText = `~ ${ele} m (Rechazada)`;
-                cotaElement.style.color = "#e74c3c"; // Rojo indicando rechazo
+                cotaElement.style.color = "#e74c3c"; 
                 
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
                 
                 statusBadge.innerText = `⛔ DESCARTANDO (SIN FIX 3D / COTA FALSA)`;
                 statusBadge.style.background = "#e74c3c";
-                return; // Corta la ejecución, no se añade a trackpoints
+                return; 
             } else {
-                // El hardware está arrojando flotantes reales con decimales lógicos
-                cotaElement.innerText = ele.toFixed(4) + " m";
+                cotaElement.innerText = ele.toString() + " m";
                 cotaElement.style.color = "#2c3e50"; 
             }
 
-            // --- FILTRO DE HARDWARE TRABADO (COTA REPETIDA) ---
             if (ultimaCotaRegistrada !== null && Math.abs(ele - ultimaCotaRegistrada) < 0.000001) {
                 rejectedCount++;
                 document.getElementById('valRechazados').innerText = rejectedCount;
                 
                 statusBadge.innerText = `⛔ DESCARTANDO (COTA CONGELADA)`;
                 statusBadge.style.background = "#e74c3c";
-                return; // Corta la ejecución
+                return; 
             }
             
             ultimaCotaRegistrada = ele;
@@ -496,7 +491,7 @@
         function generarGPXString() {
             let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="ColectoraGps Web v4.10" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${currentPuntoName}</name><time>${trackpoints[0].timeIso}</time></metadata>\n<trk><name>${currentPuntoName}</name><trkseg>\n`;
             trackpoints.forEach(pt => {
-                gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${parseFloat(pt.ele).toFixed(4)}</ele><time>${pt.timeIso}</time><accuracy>${pt.accuracy.toFixed(2)}</accuracy>\n  </trkpt>\n`;
+                gpx += `  <trkpt lat="${pt.lat}" lon="${pt.lon}">\n    <ele>${pt.ele.toString()}</ele><time>${pt.timeIso}</time><accuracy>${pt.accuracy.toFixed(2)}</accuracy>\n  </trkpt>\n`;
             });
             gpx += `</trkseg></trk>\n</gpx>`;
             return gpx;
