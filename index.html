@@ -6,39 +6,78 @@
     <title>ColectoraGPS Pro</title>
     <style>
         :root {
-            --bg-color: #e0e5e5;
-            --panel-bg: #f0f4f4;
-            --primary-text: #2c3e50;
-            --accent-green: #27ae60;
-            --accent-red: #c0392b;
-            --border-color: #bdc3c7;
+            --bg-color: #e2e8f0;
+            --panel-bg: #cbd5e1;
+            --card-bg: #f8fafc;
+            --primary-text: #1e293b;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --border-color: #94a3b8;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--primary-text);
             margin: 0;
-            padding: 15px;
+            padding: 10px;
             box-sizing: border-box;
         }
 
-        .container {
-            background-color: var(--panel-bg);
+        .card {
+            background-color: var(--card-bg);
             border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            max-width: 500px;
-            margin: 0 auto;
+            padding: 15px;
+            border: 2px solid var(--accent-green);
+            margin-bottom: 15px;
         }
 
-        .header {
-            text-align: center;
-            font-size: 48px;
+        .btn-whatsapp {
+            background-color: #25D366;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            width: 100%;
             font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
             margin-bottom: 5px;
-            color: var(--primary-text);
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            background-color: transparent;
+            font-size: 16px;
+        }
+
+        .timer {
+            text-align: center;
+            font-size: 56px;
+            font-weight: 300;
+            margin: 10px 0;
             font-variant-numeric: tabular-nums;
+            color: #334155;
         }
 
         .status-badge {
@@ -53,128 +92,152 @@
             margin-bottom: 20px;
         }
 
-        .status-badge.active {
+        .status-badge.recording {
             background-color: var(--accent-green);
+        }
+
+        .status-badge.discarding {
+            background-color: var(--accent-red);
         }
 
         .data-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 20px;
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         .data-table td {
-            padding: 10px 5px;
-            border-bottom: 1px dashed var(--border-color);
-            font-size: 16px;
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 15px;
+            font-weight: 500;
         }
 
         .data-table td:nth-child(2) {
             text-align: right;
             font-family: monospace;
-            font-size: 18px;
-            color: #2980b9;
+            font-size: 16px;
+            color: #0f172a;
         }
+
+        .data-table tr:last-child td { border-bottom: none; }
+        .text-green { color: var(--accent-green) !important; font-weight: bold; }
+        .text-red { color: var(--accent-red) !important; font-weight: bold; }
 
         .btn {
             display: block;
             width: 100%;
-            padding: 15px;
+            padding: 16px;
             border: none;
             border-radius: 8px;
             font-size: 16px;
             font-weight: bold;
             color: white;
-            background-color: var(--border-color);
             margin-bottom: 10px;
             cursor: pointer;
-            transition: background-color 0.3s;
+            text-transform: uppercase;
         }
 
-        .btn-start { background-color: var(--accent-green); }
+        .btn-start { background-color: var(--border-color); color: #333; }
         .btn-stop { background-color: var(--accent-red); }
+        .btn-download { background-color: var(--accent-blue); display: none; }
 
-        .input-group {
-            margin-bottom: 15px;
-        }
-
-        .input-group label {
-            display: block;
-            font-size: 12px;
-            color: #7f8c8d;
-            margin-bottom: 5px;
-        }
-
-        .input-group input, .input-group select {
-            width: 100%;
+        .footer-banner {
+            background-color: #064e3b;
+            color: #34d399;
             padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            box-sizing: border-box;
-            background-color: white;
+            text-align: center;
+            font-family: monospace;
+            border-radius: 8px;
+            font-size: 12px;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="input-group">
-        <label>Identificador del Punto / Trayectoria:</label>
-        <input type="text" id="puntoId" value="Despejado">
-    </div>
-    <div class="input-group">
-        <label>Modo de Medición:</label>
-        <select id="modoFiltro">
-            <option value="estatico">Estático (Filtro Espacial Activado)</option>
-            <option value="cinematico">Cinemático (Raw)</option>
-        </select>
-    </div>
+<div class="card" style="background-color: #e6f4ea; border-color: #a7f3d0;">
+    <p style="margin-top:0; font-size:14px; color:#065f46;"><strong>Servicios de Procesamiento Diferencial (GPSJ)</strong><br>Uso libre. Para post-procesamiento geodésico avanzado acoplado en la nube con el Motor GPSJ, contácteme.</p>
+    <button class="btn-whatsapp">Contactar por WhatsApp</button>
+</div>
 
-    <div class="header" id="tiempoTranscurrido">00:00</div>
-    <div class="status-badge" id="statusBadge">ESPERANDO INICIO...</div>
+<div class="input-group">
+    <label>Identificador del Punto / Trayectoria:</label>
+    <input type="text" id="puntoId" value="Despejado">
+</div>
+<div class="input-group">
+    <label>Modo de Medición:</label>
+    <select id="modoFiltro">
+        <option value="estatico">Estático (Filtro Espacial Activado)</option>
+        <option value="cinematico">Cinemático (Raw)</option>
+    </select>
+</div>
 
-    <table class="data-table">
-        <tr>
-            <td>Norte (Y Vivo):</td>
-            <td id="valNorte">---</td>
-        </tr>
-        <tr>
-            <td>Este (X Vivo):</td>
-            <td id="valEste">---</td>
-        </tr>
-        <tr>
-            <td>Cota (Z Vivo):</td>
-            <td id="valCota">--- m</td>
-        </tr>
-        <tr>
-            <td>Precisión GPS (H):</td>
-            <td id="valPrecision">--- m</td>
-        </tr>
-        <tr>
-            <td>Satélites (Uso/Vis):</td>
-            <td id="valSatelites">-- / --</td>
-        </tr>
-        <tr>
-            <td>Épocas Grabadas:</td>
-            <td id="valEpocas">0</td>
-        </tr>
-    </table>
+<div class="timer" id="tiempoTranscurrido">00:00</div>
+<div class="status-badge" id="statusBadge">ESPERANDO INICIO...</div>
 
-    <button class="btn btn-start" id="btnIniciar" onclick="iniciarLevantamiento()">INICIAR LEVANTAMIENTO</button>
-    <button class="btn btn-stop" id="btnDetener" onclick="detenerLevantamiento()" style="display:none;">DETENER LEVANTAMIENTO</button>
+<table class="data-table">
+    <tr>
+        <td>Norte (Y Vivo):</td>
+        <td id="valNorte">---</td>
+    </tr>
+    <tr>
+        <td>Este (X Vivo):</td>
+        <td id="valEste">---</td>
+    </tr>
+    <tr>
+        <td>Cota (Z):</td>
+        <td id="valCota">--- m</td>
+    </tr>
+    <tr>
+        <td>Precisión GPS (Error H):</td>
+        <td id="valPrecision" class="text-green">--- m</td>
+    </tr>
+    <tr>
+        <td>Satélites (Uso/Vis):</td>
+        <td id="valSatelites">-- / --</td>
+    </tr>
+    <tr>
+        <td>Épocas Grabadas:</td>
+        <td id="valEpocas" class="text-green">0</td>
+    </tr>
+    <tr>
+        <td>Épocas Rechazadas:</td>
+        <td id="valRechazadas" class="text-red">0</td>
+    </tr>
+</table>
+
+<button class="btn btn-start" id="btnIniciar" onclick="iniciarLevantamiento()">ESPERANDO INICIO...</button>
+<button class="btn btn-stop" id="btnDetener" onclick="detenerLevantamiento()" style="display:none;">DETENER LEVANTAMIENTO</button>
+<button class="btn btn-download" id="btnDescargar" onclick="descargarDatosCSV()">DESCARGAR LEVANTAMIENTO (CSV)</button>
+
+<div class="footer-banner" id="sysMessage">
+    Sistema Web listo. Asigne un nombre al punto y presione Iniciar.
 </div>
 
 <script>
-    // Variables de Estado y Modelo Matemático
+    // Variables de Estado y Reloj
     let watchId = null;
     let timerId = null;
     let tiempoSegundos = 0;
+    
+    // Contadores Biológicos de la App
     let epocasGrabadas = 0;
+    let epocasRechazadas = 0;
     let satelitesEnUso = 0;
     let satelitesVisibles = 0;
 
-    // Filtro de Promedio Móvil (Espacial)
+    // Acumuladores del Filtro Espacial (Z Fix Integrado)
     let sumNorte = 0, sumEste = 0, sumCota = 0;
+
+    // Memoria de la Sesión para Descarga
+    let registroDatos = [];
+
+    // Límite de precisión para descartar épocas (Ejemplo: 38m como se ve en el video)
+    const LIMITE_PRECISION = 50.0; 
 
     function formatearTiempo(segundos) {
         const m = Math.floor(segundos / 60).toString().padStart(2, '0');
@@ -182,33 +245,42 @@
         return `${m}:${s}`;
     }
 
+    // EVENTO BOTÓN INICIAR
     function iniciarLevantamiento() {
         if (!navigator.geolocation) {
-            alert("Su navegador no soporta geolocalización.");
+            alert("Error: Módulo GPS no soportado en este dispositivo.");
             return;
         }
 
-        // Reinicio de variables
+        // 1. Limpiar memoria y contadores
         tiempoSegundos = 0;
         epocasGrabadas = 0;
+        epocasRechazadas = 0;
         sumNorte = 0; sumEste = 0; sumCota = 0;
+        registroDatos = []; // Vaciar la matriz de almacenamiento
         
+        // 2. Preparar Interfaz
         document.getElementById('tiempoTranscurrido').innerText = "00:00";
         document.getElementById('valEpocas').innerText = "0";
+        document.getElementById('valRechazadas').innerText = "0";
+        
         document.getElementById('btnIniciar').style.display = 'none';
+        document.getElementById('btnDescargar').style.display = 'none'; // Ocultar descarga al iniciar
         document.getElementById('btnDetener').style.display = 'block';
         
         const badge = document.getElementById('statusBadge');
         badge.innerText = "ENGANCHANDO CONSTELACIÓN...";
-        badge.classList.remove('active');
+        badge.className = "status-badge";
+        
+        document.getElementById('sysMessage').innerText = "Motor GPS Iniciado. Capturando coordenadas...";
 
-        // Iniciar Cronómetro
+        // 3. Iniciar Reloj
         timerId = setInterval(() => {
             tiempoSegundos++;
             document.getElementById('tiempoTranscurrido').innerText = formatearTiempo(tiempoSegundos);
         }, 1000);
 
-        // Iniciar captura GPS de alta precisión
+        // 4. Encender Antena GPS
         watchId = navigator.geolocation.watchPosition(procesarPosicion, manejarError, {
             enableHighAccuracy: true,
             maximumAge: 0,
@@ -216,77 +288,124 @@
         });
     }
 
+    // EVENTO BOTÓN DETENER
     function detenerLevantamiento() {
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         if (timerId !== null) clearInterval(timerId);
         
         document.getElementById('btnIniciar').style.display = 'block';
+        document.getElementById('btnIniciar').innerText = "INICIAR NUEVO LEVANTAMIENTO";
         document.getElementById('btnDetener').style.display = 'none';
         
+        // Mostrar botón de descarga si hay datos
+        if (registroDatos.length > 0) {
+            document.getElementById('btnDescargar').style.display = 'block';
+        }
+        
         const badge = document.getElementById('statusBadge');
-        badge.innerText = "SISTEMA DETENIDO";
-        badge.classList.remove('active');
-        badge.style.backgroundColor = "#7f8c8d";
+        badge.innerText = "LEVANTAMIENTO DETENIDO";
+        badge.className = "status-badge";
+        
+        document.getElementById('sysMessage').innerText = `Proceso finalizado. Total guardado: ${epocasGrabadas} épocas.`;
     }
 
+    // MOTOR DE CÁLCULO Y FILTRO
     function procesarPosicion(position) {
-        // Validación de señal
-        if (position.coords.accuracy > 50) return; // Descartar épocas con error > 50m
+        const accuracy = position.coords.accuracy;
+        const badge = document.getElementById('statusBadge');
+
+        // 1. Filtro de Precisión (Descarte de Épocas Malas)
+        if (accuracy > LIMITE_PRECISION) {
+            epocasRechazadas++;
+            document.getElementById('valRechazadas').innerText = epocasRechazadas;
+            badge.innerText = `DESCARTANDO (Mala Precisión: ±${accuracy.toFixed(1)}m)`;
+            badge.className = "status-badge discarding";
+            return; // Aborta este ciclo, no suma al modelo
+        }
 
         epocasGrabadas++;
-        
-        // Actualizar UI Badge
-        const badge = document.getElementById('statusBadge');
-        badge.innerText = `GRABANDO (Precisión: ±${position.coords.accuracy.toFixed(1)}m)`;
-        badge.classList.add('active');
+        badge.innerText = `GRABANDO (Precisión: ±${accuracy.toFixed(1)}m)`;
+        badge.className = "status-badge recording";
 
-        // LÓGICA DE APROXIMACIÓN (LAT/LON a Pseudocoordenadas Planas para visualización)
-        // Nota: Para topografía geodésica real, utilice la librería Proj4js aquí.
+        // 2. Extracción de Coordenadas Crudas
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        
-        // Extracción de Cota (Altitud). Si el chip no reporta, asume 0 para no quebrar la matemática
+        // Validación Z: Si no hay altitud, se usa 0.0 para no quebrar la suma.
         const cotaRaw = position.coords.altitude !== null ? position.coords.altitude : 0.0;
 
-        // MODELO MATEMÁTICO: Filtro Espacial Activado (Promedio Simple Acumulativo)
         const modoFiltro = document.getElementById('modoFiltro').value;
-        let cotaFinal, norteFinal, esteFinal;
+        let norteFinal, esteFinal, cotaFinal;
 
+        // 3. Modelo Matemático Tridimensional
         if (modoFiltro === "estatico") {
-            sumNorte += lat; // Acumulador Y
-            sumEste += lon;  // Acumulador X
-            sumCota += cotaRaw; // Acumulador Z (Soluciona el error de congelamiento)
+            sumNorte += lat;
+            sumEste += lon;
+            sumCota += cotaRaw; // El problema del Z estático se soluciona aquí
 
-            norteFinal = (sumNorte / epocasGrabadas) * 111320; // Conversión métrica aproximada
-            esteFinal = (sumEste / epocasGrabadas) * 111320 * Math.cos(lat * Math.PI / 180);
+            norteFinal = (sumNorte / epocasGrabadas) * 111320; 
+            esteFinal = (sumEste / epocasGrabadas) * 111320 * Math.cos((sumNorte / epocasGrabadas) * Math.PI / 180);
             cotaFinal = sumCota / epocasGrabadas;
         } else {
-            // Modo Cinemático (Sin filtro, lectura cruda)
+            // Cinemático crudo
             norteFinal = lat * 111320;
             esteFinal = lon * 111320 * Math.cos(lat * Math.PI / 180);
             cotaFinal = cotaRaw;
         }
 
-        // Renderizado en Pantalla
+        // 4. Renderizado en UI
         document.getElementById('valNorte').innerText = norteFinal.toFixed(4);
         document.getElementById('valEste').innerText = esteFinal.toFixed(4);
-        
-        // Corrección de visualización de la Cota
         document.getElementById('valCota').innerText = (cotaFinal !== 0) ? cotaFinal.toFixed(4) + " m" : "Sin Datos Z";
-        document.getElementById('valPrecision').innerText = "±" + position.coords.accuracy.toFixed(2) + " m";
+        document.getElementById('valPrecision').innerText = "±" + accuracy.toFixed(2) + " m";
         document.getElementById('valEpocas').innerText = epocasGrabadas;
+
+        // 5. ALMACENAMIENTO EN MEMORIA (Para posterior descarga)
+        // Guardamos la época, tiempo transcurrido y las coordenadas calculadas
+        registroDatos.push({
+            epoca: epocasGrabadas,
+            tiempo: formatearTiempo(tiempoSegundos),
+            norte: norteFinal.toFixed(4),
+            este: esteFinal.toFixed(4),
+            cota: cotaFinal.toFixed(4),
+            precision: accuracy.toFixed(2),
+            satelites_uso: satelitesEnUso
+        });
     }
 
     function manejarError(error) {
-        console.warn('ERROR(' + error.code + '): ' + error.message);
+        document.getElementById('sysMessage').innerText = `Error del Sensor: ${error.message}`;
     }
 
-    /* * ==========================================
-     * PUENTE DE COMUNICACIÓN ANDROID -> JAVASCRIPT
-     * ==========================================
-     * Esta función debe ser invocada desde el código Java/Kotlin del WebView
-     * Ejemplo en Android: webView.evaluateJavascript("actualizarSatelitesDesdeAndroid(8, 12);", null);
-     */
+    // MÓDULO DE EXPORTACIÓN Y DESCARGA
+    function descargarDatosCSV() {
+        if (registroDatos.length === 0) {
+            alert("No hay datos grabados para descargar.");
+            return;
+        }
+
+        let puntoNombre = document.getElementById('puntoId').value.trim() || "Punto_GPS";
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // Cabeceras del CSV
+        csvContent += "Epoca,Tiempo,Norte(Y),Este(X),Cota(Z),Precision(m),Satelites\n";
+        
+        // Filas de datos
+        registroDatos.forEach(function(row) {
+            let rowString = `${row.epoca},${row.tiempo},${row.norte},${row.este},${row.cota},${row.precision},${row.satelites_uso}`;
+            csvContent += rowString + "\r\n";
+        });
+
+        // Crear enlace fantasma para forzar la descarga en el navegador
+        var encodedUri = encodeURI(csvContent);
+        var link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${puntoNombre}_Levantamiento.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link); // Limpieza del DOM
+    }
+
+    // PUENTE DE CONSTELACIÓN (Android -> WebView)
     function actualizarSatelitesDesdeAndroid(enUso, visibles) {
         satelitesEnUso = enUso;
         satelitesVisibles = visibles;
